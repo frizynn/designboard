@@ -143,6 +143,11 @@ The layer tree names containers the way a design tool does - **Row**, **Column**
 Artboard rows carry their pixel size, element rows their tag. Selecting in the tree selects in the
 artboard, and vice versa.
 
+Two affordances carry the selection, both drawn by the agent inside the artboard so they follow
+the element exactly: **hover** is a dashed rose outline, **selection** is a solid one with corner
+handles. Both take the element's own border-radius plus their offset, so they hug a rounded button
+instead of boxing it.
+
 Properties come in sections - Content, Appearance, Text, Sizing, Position, Contents layout - each
 with a Reset. A blue dot on a field means the value is set inline on that element rather than
 inherited.
