@@ -71,7 +71,7 @@ ok("rejects a badly named artboard",
 ok("rejects extract into a non-empty directory",
   /not empty/.test(rejects(["--extract", "spring-menu.html", "--to", "back"]) || ""));
 ok("rejects a page that is not a canvas",
-  /not a design-canvas page/.test(rejects(["--check", "Main.html"]) || ""));
+  /not a designboard page/.test(rejects(["--check", "Main.html"]) || ""));
 
 rmSync(dir, { recursive: true, force: true });
 console.log(`\n${pass} passed, ${fail} failed\n`);

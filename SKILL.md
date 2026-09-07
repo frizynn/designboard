@@ -1,5 +1,5 @@
 ---
-name: design-canvas
+name: designboard
 description: >
   Draft visual designs as self-contained HTML artboards laid out on one pan/zoom canvas, then
   publish the canvas as a single portable HTML file the user can open, review, annotate and

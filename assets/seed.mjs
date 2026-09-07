@@ -161,7 +161,7 @@ function readState(page) {
   if (!existsSync(page)) die(`page not found: ${page}`);
   const html = readFileSync(page, "utf8");
   const m = html.match(/<script id="canvas-doc" type="application\/json">([\s\S]*?)<\/script>/);
-  if (!m) die("not a design-canvas page (no state block) - it cannot be read back from here");
+  if (!m) die("not a designboard page (no state block) - it cannot be read back from here");
   try {
     return JSON.parse(m[1].replace(/<\\\/script/g, "</script").replace(/<\\!--/g, "<!--"));
   } catch (e) { die(`state block is unparsable: ${e.message}`); }
