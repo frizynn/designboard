@@ -129,10 +129,28 @@ Two that override everything else:
   that. Leave every other spacing, font, size, position and color exactly as it is. If you think a
   broader change would help, finish what they asked and *suggest* the rest.
 
+## Editing on the canvas
+
+The canvas has modes, on the toolbar and on keys: **Select** (V) picks elements inside an artboard
+and opens the properties panel; **Note** (N) drops a sticky note; **Draw** (D) is freehand ink.
+With no mode active, dragging pans.
+
+Selection works by an agent injected into each artboard's iframe - the host cannot reach across the
+opaque origin, so every edit travels by postMessage. The panel edits inline styles (text, box,
+layout) and the text of leaf elements. **Save** serialises every artboard back out of its iframe,
+strips the agent, and downloads an updated canvas file - re-seed from it, or keep it as is.
+
+**Never emit the literal `<!--` or `<script` inside the canvas's own script block.** Together they
+put the HTML parser into script-data-double-escaped state, `</script>` stops closing the block, the
+script is left unterminated and never executes - silently, with no console error. Split them
+(`"<" + "!--"`, `` `<scr` + `ipt>` ``). The template does this deliberately; keep it that way.
+
 ## Known limits
 
-- The canvas renders and annotates; it does not yet edit elements. Changes go through the working
-  files and a re-seed.
-- Export is PNG per artboard via the browser's own capture; there is no PDF pipeline yet.
+- The panel edits one element at a time. No multi-select, no drag-to-move elements, no layer tree.
+- No shape or text tools yet - no rectangle, ellipse, arrow, or text insertion.
+- No undo/redo. Save downloads a new file rather than overwriting in place, so the previous file
+  is the undo step.
+- Export PDF goes through the browser's print dialog. There is no per-artboard PNG export.
 - Webfonts load from Google Fonts by `<link>`. Anything else must be a `@font-face` data: URI
   inside the artboard.

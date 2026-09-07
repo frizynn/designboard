@@ -56,16 +56,54 @@
   #title { position: fixed; top: 16px; left: 18px; font-size: 13px; font-weight: 500; z-index: 10;
     padding: 5px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; }
 
+  #panel { position: fixed; top: 0; right: 0; bottom: 0; width: 268px; z-index: 15;
+    background: var(--panel); border-left: 1px solid var(--line);
+    display: none; flex-direction: column; overflow: hidden; }
+  #panel.on { display: flex; }
+  #panel header { display: flex; align-items: center; justify-content: space-between;
+    padding: 11px 12px; border-bottom: 1px solid var(--line); font-weight: 500; }
+  #panel header button { border: 0; background: transparent; font: inherit; cursor: pointer;
+    color: var(--muted); padding: 2px 6px; border-radius: 4px; }
+  #panel header button:hover { background: var(--bg); color: var(--ink); }
+  #panel .body { overflow-y: auto; padding: 4px 0 20px; }
+  #panel .grp { padding: 10px 12px 4px; font-size: 10px; letter-spacing: .07em;
+    text-transform: uppercase; color: var(--muted); }
+  #panel .row { display: grid; grid-template-columns: 78px 1fr; gap: 8px; align-items: center;
+    padding: 3px 12px; }
+  #panel .row label { color: var(--muted); font-size: 12px; overflow: hidden;
+    text-overflow: ellipsis; }
+  #panel input, #panel select, #panel textarea { font: inherit; width: 100%; min-width: 0;
+    color: var(--ink); background: var(--bg); border: 1px solid var(--line);
+    border-radius: 4px; padding: 4px 6px; }
+  #panel input[type=color] { padding: 1px; height: 26px; cursor: pointer; }
+  #panel textarea { resize: vertical; min-height: 62px; font-size: 12px; }
+  #panel .tagline { padding: 8px 12px; color: var(--muted); font-size: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+  #panel .empty { padding: 24px 14px; color: var(--muted); text-align: center; line-height: 1.6; }
+  #bar { max-width: calc(100vw - 24px); overflow-x: auto; }
+  body.has-panel #bar { transform: translateX(calc(-50% - 134px));
+    max-width: calc(100vw - 292px); }
+
+  #ink { position: absolute; top: 0; left: 0; overflow: visible; pointer-events: none; }
+  #viewport.pen { cursor: crosshair; }
+  #viewport.noting { cursor: copy; }
+  #bar button.active { background: var(--sel); color: #fff; }
+  .note[contenteditable="true"] { outline: 2px solid var(--sel); cursor: text; }
+  .note { cursor: grab; }
+
   #focus { position: fixed; inset: 0; z-index: 20; background: var(--bg); display: none; }
   #focus.on { display: block; }
   #focus iframe { width: 100%; height: 100%; border: 0; background: #fff; }
   #focus-close { position: fixed; top: 14px; right: 14px; z-index: 21; }
 
   @media print {
-    #bar, #title, #viewport { display: none !important; }
-    #print-out { display: block !important; }
+    #bar, #title, #viewport, #panel, #focus { display: none !important; }
+    #print-out { position: static !important; left: auto !important; width: auto !important;
+      height: auto !important; overflow: visible !important; }
   }
-  #print-out { display: none; }
+  /* Off-screen, not display:none - a none-d iframe never lays out, so it prints blank. */
+  #print-out { position: absolute; left: -100000px; top: 0; width: 1px; height: 1px;
+    overflow: hidden; }
   #print-out .p { page-break-after: always; }
   #print-out iframe { border: 0; display: block; }
 </style>
@@ -73,7 +111,12 @@
 <body>
 
 <div id="title">__CANVAS_TITLE__</div>
-<div id="viewport"><div id="world"></div></div>
+<div id="viewport"><div id="world"><svg id="ink"></svg></div></div>
+
+<aside id="panel">
+  <header><span id="panel-title">Element</span><button id="panel-close">Done</button></header>
+  <div class="body" id="panel-body"><div class="empty">Click an element in an artboard to edit it.</div></div>
+</aside>
 <div id="focus"><button id="focus-close">Close</button></div>
 <div id="print-out"></div>
 
@@ -85,6 +128,12 @@
   <button id="zoom-in" title="Zoom in">+</button>
   <button id="fit">Fit</button>
   <span class="sep"></span>
+  <button id="pick" title="Select and edit elements (V)">Select</button>
+  <button id="note" title="Add a note (N)">Note</button>
+  <button id="pen" title="Draw (D)">Draw</button>
+  <button id="erase" title="Clear drawing">Clear</button>
+  <span class="sep"></span>
+  <button id="save" title="Download the updated canvas">Save</button>
   <button id="print">Export PDF</button>
 </div>
 
@@ -94,7 +143,7 @@
 (() => {
   "use strict";
   const raw = document.getElementById("canvas-doc").textContent;
-  const DOC = JSON.parse(raw.replace(/<\\\/script/g, "</script").replace(/<\\!--/g, "<!--"));
+  const DOC = JSON.parse(raw.replace(/<\\\/script/g, "</scr" + "ipt").replace(/<\\!--/g, "<" + "!--"));
   const files = DOC.files || {};
   const manifest = DOC.canvas || {};
   const boards = manifest.artboards || [];
@@ -105,8 +154,46 @@
   const MIME = { png:"image/png", jpg:"image/jpeg", jpeg:"image/jpeg", gif:"image/gif",
                  webp:"image/webp", avif:"image/avif", bmp:"image/bmp", svg:"image/svg+xml" };
 
+
+  // Injected into every artboard. The host cannot reach into the iframe (opaque origin),
+  // so all selection and editing happens here and travels by postMessage.
+  const AGENT = `<scr` + `ipt data-dc-agent>(()=>{
+  const P=(el)=>{const p=[];while(el&&el!==document.documentElement){const par=el.parentNode;if(!par)break;p.unshift([...par.children].indexOf(el));el=par;}return p;};
+  const E=(p)=>{let el=document.documentElement;for(const i of p){if(!el||!el.children[i])return null;el=el.children[i];}return el;};
+  let cur=null,on=false;
+  const box=document.createElement('div');
+  box.style.cssText='position:absolute;pointer-events:none;z-index:2147483647;border:2px solid #b45309;border-radius:2px;display:none';
+  const hov=document.createElement('div');
+  hov.style.cssText='position:absolute;pointer-events:none;z-index:2147483646;border:1px solid rgba(180,83,9,.5);display:none';
+  addEventListener('DOMContentLoaded',()=>{document.body.append(box,hov);});
+  const place=(n,el)=>{if(!el){n.style.display='none';return;}const r=el.getBoundingClientRect();
+    n.style.cssText+=';display:block';n.style.left=(r.left+scrollX-2)+'px';n.style.top=(r.top+scrollY-2)+'px';
+    n.style.width=r.width+'px';n.style.height=r.height+'px';};
+  const info=(el)=>{const c=getComputedStyle(el);const o={};
+    for(const k of ['color','backgroundColor','fontSize','fontWeight','lineHeight','letterSpacing','textAlign','padding','margin','width','height','borderRadius','border','display','flexDirection','gap','justifyContent','alignItems','opacity'])o[k]=c[k];
+    const kids=[...el.children].length;
+    return{tag:el.tagName.toLowerCase(),path:P(el),styles:o,inline:el.getAttribute('style')||'',
+      text:kids===0?el.textContent:null};};
+  addEventListener('message',(e)=>{const m=e.data||{};
+    if(m.t==='mode'){on=!!m.on;if(!on){box.style.display='none';hov.style.display='none';cur=null;}}
+    else if(m.t==='style'){const el=E(m.path);if(el){el.style[m.prop]=m.value;place(box,el);
+      parent.postMessage({t:'sel',...info(el)},'*');}}
+    else if(m.t==='text'){const el=E(m.path);if(el){el.textContent=m.value;place(box,el);}}
+    else if(m.t==='serialize'){const c=document.documentElement.cloneNode(true);
+      c.querySelectorAll('[data-dc-agent]').forEach(n=>n.remove());
+      const b=c.querySelector('body');
+      if(b){[...b.children].forEach(n=>{if(n.style&&n.style.zIndex==='2147483647'||n.style&&n.style.zIndex==='2147483646')n.remove();});}
+      parent.postMessage({t:'html',id:m.id,html:'<!doctype html>\\n'+c.outerHTML},'*');}
+    else if(m.t==='deselect'){box.style.display='none';cur=null;}});
+  addEventListener('mouseover',(e)=>{if(!on)return;if(e.target!==cur)place(hov,e.target);},true);
+  addEventListener('mouseout',()=>{hov.style.display='none';},true);
+  addEventListener('click',(e)=>{if(!on)return;e.preventDefault();e.stopPropagation();
+    cur=e.target;place(box,cur);hov.style.display='none';parent.postMessage({t:'sel',...info(cur)},'*');},true);
+  addEventListener('scroll',()=>{if(cur)place(box,cur);},true);
+  })();</scr` + `ipt>`;
+
   // Inline every image files-entry into an artboard's source, by bare filename.
-  function resolve(src) {
+  function resolve(src, withAgent) {
     let out = src;
     for (const [name, data] of Object.entries(files)) {
       if (!IMG.test(name)) continue;
@@ -116,7 +203,7 @@
       out = out.replace(new RegExp('src="\\.?/?' + esc + '"', "g"), 'src="' + uri + '"');
       out = out.replace(new RegExp("url\\((['\"]?)\\.?/?" + esc + "\\1\\)", "g"), "url(" + uri + ")");
     }
-    return out;
+    return withAgent === false ? out : out + AGENT;
   }
 
   const world = document.getElementById("world");
@@ -127,8 +214,10 @@
 
   const onPage = (o) => !pages.length || (o.page || pages[0].id) === page;
 
+  const frames = new Map();   // file -> iframe
   function render() {
-    world.textContent = "";
+    world.querySelectorAll(".board, .note").forEach(n => n.remove());
+    frames.clear();
     for (const b of boards) {
       if (!onPage(b)) continue;
       const src = files[b.file];
@@ -150,6 +239,9 @@
       f.setAttribute("sandbox", "allow-scripts");   // no allow-same-origin: opaque origin
       f.setAttribute("loading", "lazy");
       f.srcdoc = resolve(src);
+      f.style.pointerEvents = mode === "pick" ? "auto" : "none";
+      f.addEventListener("load", () => tellAgent(f, { t: "mode", on: mode === "pick" }));
+      frames.set(b.file, f);
       frame.append(f);
       el.append(strip, frame);
       el.addEventListener("pointerdown", (e) => {
@@ -167,8 +259,10 @@
       if (!onPage(n)) continue;
       const el = document.createElement("div");
       el.className = "note";
+      el.dataset.id = n.id;
       el.style.cssText = `left:${n.x||0}px;top:${n.y||0}px;width:${n.w||220}px`;
       el.textContent = n.text || "";
+      wireNote(el, n);
       world.append(el);
     }
     apply();
@@ -182,6 +276,8 @@
   // ---- pan / zoom -----------------------------------------------------------
   let drag = null;
   viewport.addEventListener("pointerdown", (e) => {
+    if (mode === "pen") return penDown(e);
+    if (mode === "note" && !e.target.closest(".note")) return placeNote(e);
     if (e.target.closest(".board") || e.target.closest(".note")) return;
     document.querySelectorAll(".board.selected").forEach(n => n.classList.remove("selected"));
     touched = true;
@@ -250,21 +346,21 @@
       const f = document.createElement("iframe");
       f.setAttribute("sandbox", "allow-scripts");
       f.width = b.w || 800; f.height = b.h || 600;
-      f.srcdoc = resolve(src);
+      f.srcdoc = resolve(src, false);
       wrap.append(f); out.append(wrap);
     }
     setTimeout(() => print(), 400);
   };
 
   // ---- pages ----------------------------------------------------------------
-  const sel = document.getElementById("pages");
+  const pagesSel = document.getElementById("pages");
   if (pages.length) {
     for (const p of pages) {
       const o = document.createElement("option"); o.value = p.id; o.textContent = p.name;
-      sel.append(o);
+      pagesSel.append(o);
     }
-    sel.hidden = false; document.getElementById("pages-sep").hidden = false;
-    sel.onchange = () => { page = sel.value; touched = false; render(); fit(); };
+    pagesSel.hidden = false; document.getElementById("pages-sep").hidden = false;
+    pagesSel.onchange = () => { page = pagesSel.value; touched = false; render(); paintInk(); fit(); };
   }
 
   document.getElementById("zoom-in").onclick = () => { touched = true; view.k = Math.min(4, view.k * 1.25); apply(); };
@@ -279,11 +375,247 @@
     rt = setTimeout(fit, 120);
   });
 
+
+  // ---- modes ----------------------------------------------------------------
+  let mode = "pan";
+  const MODES = { pick: "pick", note: "note", pen: "pen" };
+  const tellAgent = (f, msg) => { try { f.contentWindow.postMessage(msg, "*"); } catch {} };
+
+  function setMode(m) {
+    mode = mode === m ? "pan" : m;
+    for (const id of Object.keys(MODES))
+      document.getElementById(id).classList.toggle("active", mode === id);
+    viewport.classList.toggle("pen", mode === "pen");
+    viewport.classList.toggle("noting", mode === "note");
+    for (const f of frames.values()) {
+      f.style.pointerEvents = mode === "pick" ? "auto" : "none";
+      tellAgent(f, { t: "mode", on: mode === "pick" });
+    }
+    if (mode !== "pick") closePanel();
+  }
+
+  // ---- properties panel -----------------------------------------------------
+  const SPEC = [
+    ["Text", [
+      ["color", "color", "Color"], ["fontSize", "len", "Size"],
+      ["fontWeight", "sel", "Weight", ["300","400","500","600","700","800"]],
+      ["lineHeight", "len", "Line height"], ["letterSpacing", "len", "Tracking"],
+      ["textAlign", "sel", "Align", ["left","center","right","justify"]],
+    ]],
+    ["Box", [
+      ["backgroundColor", "color", "Background"], ["padding", "len", "Padding"],
+      ["margin", "len", "Margin"], ["width", "len", "Width"], ["height", "len", "Height"],
+      ["borderRadius", "len", "Radius"], ["border", "len", "Border"],
+      ["opacity", "len", "Opacity"],
+    ]],
+    ["Layout", [
+      ["display", "sel", "Display", ["block","flex","grid","inline-block","inline-flex","none"]],
+      ["flexDirection", "sel", "Direction", ["row","column","row-reverse","column-reverse"]],
+      ["gap", "len", "Gap"],
+      ["justifyContent", "sel", "Justify", ["flex-start","center","flex-end","space-between","space-around"]],
+      ["alignItems", "sel", "Align items", ["stretch","flex-start","center","flex-end","baseline"]],
+    ]],
+  ];
+  const panel = document.getElementById("panel");
+  const panelBody = document.getElementById("panel-body");
+  let sel = null;   // { file, path, styles, text }
+
+  const toHex = (c) => {
+    const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/.exec(c || "");
+    if (!m) return null;
+    return "#" + [1,2,3].map(i => (+m[i]).toString(16).padStart(2, "0")).join("");
+  };
+  const closePanel = () => { panel.classList.remove("on"); document.body.classList.remove("has-panel");
+    if (sel && frames.get(sel.file)) tellAgent(frames.get(sel.file), { t: "deselect" });
+    sel = null; };
+
+  function push(prop, value) {
+    if (!sel) return;
+    const f = frames.get(sel.file); if (!f) return;
+    tellAgent(f, { t: "style", path: sel.path, prop, value });
+  }
+
+  function buildPanel(d) {
+    panelBody.textContent = "";
+    document.getElementById("panel-title").textContent = d.tag;
+    const tl = document.createElement("div");
+    tl.className = "tagline";
+    tl.textContent = sel.file.replace(/\.html$/i, "") + "  ·  <" + d.tag + ">";
+    panelBody.append(tl);
+
+    if (d.text !== null && d.text !== undefined) {
+      const g = document.createElement("div"); g.className = "grp"; g.textContent = "Content";
+      const r = document.createElement("div"); r.className = "row";
+      r.style.gridTemplateColumns = "1fr";
+      const ta = document.createElement("textarea");
+      ta.value = d.text;
+      ta.oninput = () => { const f = frames.get(sel.file);
+        if (f) tellAgent(f, { t: "text", path: sel.path, value: ta.value }); };
+      r.append(ta); panelBody.append(g, r);
+    }
+
+    for (const [group, props] of SPEC) {
+      const g = document.createElement("div"); g.className = "grp"; g.textContent = group;
+      panelBody.append(g);
+      for (const [prop, kind, label, opts] of props) {
+        const row = document.createElement("div"); row.className = "row";
+        const lb = document.createElement("label"); lb.textContent = label;
+        let input;
+        if (kind === "color") {
+          input = document.createElement("input"); input.type = "color";
+          input.value = toHex(d.styles[prop]) || "#000000";
+          input.oninput = () => push(prop, input.value);
+        } else if (kind === "sel") {
+          input = document.createElement("select");
+          const cur = d.styles[prop];
+          const list = opts.includes(cur) ? opts : [cur, ...opts];
+          for (const o of list) { const op = document.createElement("option");
+            op.value = op.textContent = o; input.append(op); }
+          input.value = cur;
+          input.onchange = () => push(prop, input.value);
+        } else {
+          input = document.createElement("input"); input.type = "text";
+          input.value = d.styles[prop] || "";
+          input.onchange = () => push(prop, input.value);
+        }
+        row.append(lb, input); panelBody.append(row);
+      }
+    }
+  }
+
+  addEventListener("message", (e) => {
+    const m = e.data || {};
+    if (m.t === "sel") {
+      let file = null;
+      for (const [k, f] of frames) if (f.contentWindow === e.source) file = k;
+      if (!file) return;
+      sel = { file, path: m.path };
+      panel.classList.add("on"); document.body.classList.add("has-panel");
+      buildPanel(m);
+    } else if (m.t === "html") {
+      const r = pending.get(m.id); if (r) { pending.delete(m.id); r(m.html); }
+    }
+  });
+  document.getElementById("panel-close").onclick = closePanel;
+
+  // ---- notes ----------------------------------------------------------------
+  function wireNote(el, n) {
+    let d = null;
+    el.addEventListener("pointerdown", (e) => {
+      if (el.isContentEditable) return;
+      e.stopPropagation();
+      d = { x: e.clientX / view.k - (n.x || 0), y: e.clientY / view.k - (n.y || 0) };
+      el.setPointerCapture(e.pointerId);
+    });
+    el.addEventListener("pointermove", (e) => {
+      if (!d) return;
+      n.x = Math.round(e.clientX / view.k - d.x); n.y = Math.round(e.clientY / view.k - d.y);
+      el.style.left = n.x + "px"; el.style.top = n.y + "px";
+    });
+    el.addEventListener("pointerup", () => { d = null; });
+    el.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      el.contentEditable = "true"; el.focus();
+    });
+    el.addEventListener("blur", () => {
+      el.contentEditable = "false"; n.text = el.textContent;
+    });
+  }
+  function placeNote(e) {
+    const x = Math.round((e.clientX - view.x) / view.k), y = Math.round((e.clientY - view.y) / view.k);
+    let i = 1; while (notes.some(n => n.id === "note-" + i)) i++;
+    const n = { id: "note-" + i, x, y, w: 220, text: "New note",
+                ...(pages.length ? { page } : {}) };
+    notes.push(n); render(); setMode("note");
+  }
+
+  // ---- pen ------------------------------------------------------------------
+  const ink = document.getElementById("ink");
+  const drawings = manifest.drawings = manifest.drawings || [];
+  function paintInk() {
+    ink.textContent = "";
+    for (const d of drawings) {
+      if (pages.length && (d.page || pages[0].id) !== page) continue;
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", d.d);
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", d.stroke || "#b45309");
+      path.setAttribute("stroke-width", d.width || 3);
+      path.setAttribute("stroke-linecap", "round");
+      path.setAttribute("stroke-linejoin", "round");
+      ink.append(path);
+    }
+  }
+  let stroke = null;
+  const wpt = (e) => [Math.round((e.clientX - view.x) / view.k), Math.round((e.clientY - view.y) / view.k)];
+  function penDown(e) {
+    const [x, y] = wpt(e);
+    stroke = { d: `M${x} ${y}`, stroke: "#b45309", width: 3, ...(pages.length ? { page } : {}) };
+    drawings.push(stroke); viewport.setPointerCapture(e.pointerId); paintInk();
+  }
+  viewport.addEventListener("pointermove", (e) => {
+    if (!stroke) return;
+    const [x, y] = wpt(e); stroke.d += ` L${x} ${y}`; paintInk();
+  });
+  viewport.addEventListener("pointerup", () => { stroke = null; });
+  document.getElementById("erase").onclick = () => {
+    const keep = drawings.filter(d => pages.length && (d.page || pages[0].id) !== page);
+    drawings.length = 0; drawings.push(...keep); paintInk();
+  };
+
+  // ---- save -----------------------------------------------------------------
+  const pending = new Map();
+  let seq = 0;
+  const askHtml = (f) => new Promise((res) => {
+    const id = ++seq; pending.set(id, res);
+    tellAgent(f, { t: "serialize", id });
+    setTimeout(() => { if (pending.has(id)) { pending.delete(id); res(null); } }, 3000);
+  });
+
+  async function save() {
+    const btn = document.getElementById("save");
+    const was = btn.textContent; btn.textContent = "Saving…"; btn.disabled = true;
+    try {
+      for (const [file, f] of frames) {
+        const html = await askHtml(f);
+        if (html) files[file] = html;
+      }
+      manifest.notes = notes; manifest.drawings = drawings;
+      const state = JSON.stringify({ title: DOC.title, files, canvas: manifest })
+        .replace(/<\/script/gi, "<\\/script").replace(/<!\x2D\x2D/g, "<\\!--");
+      const clone = document.documentElement.cloneNode(true);
+      clone.querySelector("#world").textContent = "";
+      clone.querySelector("#print-out").textContent = "";
+      clone.querySelectorAll("#focus iframe").forEach(n => n.remove());
+      clone.querySelector("#panel").classList.remove("on");
+      clone.querySelector("#canvas-doc").textContent = state;
+      const blob = new Blob(["<!doctype html>\n" + clone.outerHTML], { type: "text/html" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = (DOC.title || "canvas").toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".html";
+      a.click(); URL.revokeObjectURL(a.href);
+      btn.textContent = "Saved";
+      setTimeout(() => { btn.textContent = was; btn.disabled = false; }, 1200);
+    } catch (err) {
+      btn.textContent = "Failed"; console.error(err);
+      setTimeout(() => { btn.textContent = was; btn.disabled = false; }, 1600);
+    }
+  }
+  document.getElementById("save").onclick = save;
+  for (const id of Object.keys(MODES)) document.getElementById(id).onclick = () => setMode(id);
+  addEventListener("keydown", (e) => {
+    if (e.target.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    const k = e.key.toLowerCase();
+    if (k === "v") setMode("pick"); else if (k === "n") setMode("note");
+    else if (k === "d") setMode("pen");
+  });
+
   // ---- boot -----------------------------------------------------------------
   const launch = manifest.launch || { view: "canvas" };
   page = (pages.length ? (launch.page || pages[0].id) : null);
-  if (pages.length) sel.value = page;
+  if (pages.length) pagesSel.value = page;
   render();
+  paintInk();
   if (launch.view === "focused" && files[launch.file]) {
     focusOn(boards.find(b => b.file === launch.file) || { file: launch.file });
   }
