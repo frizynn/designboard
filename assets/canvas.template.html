@@ -5,621 +5,792 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>__CANVAS_TITLE__</title>
 <style>
-  :root {
-    --bg: #f4f3f1; --grid: #e3e1dd; --ink: #1c1917; --muted: #78716c;
-    --line: #d6d3d1; --panel: #fffefc; --sel: #b45309; --note: #fef3c7; --note-line: #fcd34d;
+  :root{
+    --bg:#191919; --side:#1e1e1e; --side2:#232323; --field:#2b2b2b; --field2:#333;
+    --line:#383838; --line2:#2e2e2e; --ink:#e8e8e8; --muted:#8b8b8b; --dim:#6a6a6a;
+    --row:#3a3a3a; --accent:#2f5da8; --hand:#e0568c; --note:#fbf3bd; --noteink:#3d3a20;
   }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      --bg: #1c1917; --grid: #292524; --ink: #f5f5f4; --muted: #a8a29e;
-      --line: #44403c; --panel: #262322; --sel: #f59e0b; --note: #422006; --note-line: #92400e;
-    }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;overflow:hidden}
+  body{background:var(--bg);color:var(--ink);
+    font:13px/1.45 ui-sans-serif,-apple-system,"Segoe UI",system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  input,select{font:inherit;color:inherit;background:none;border:0;outline:0;min-width:0}
+
+  #app{display:flex;height:100%}
+  #stage{position:relative;flex:1;min-width:0}
+  #viewport{position:absolute;inset:0;overflow:hidden;cursor:grab}
+  #viewport.panning{cursor:grabbing}
+  #viewport.pen{cursor:crosshair}
+  #viewport.noting{cursor:copy}
+  #world{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
+  #ink{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
+
+  .board{position:absolute}
+  .board-strip{display:flex;align-items:center;gap:8px;height:26px;color:var(--muted);
+    font-size:13px;user-select:none}
+  .board-strip .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .board-strip .ic{opacity:0;display:flex;gap:10px;transition:opacity .12s}
+  .board:hover .board-strip .ic{opacity:1}
+  .board-strip .ic button{display:flex;color:var(--muted)}
+  .board-strip .ic button:hover{color:var(--ink)}
+  .board-frame{background:#fff;overflow:hidden;box-shadow:0 1px 3px rgb(0 0 0/.4)}
+  .board.selected .board-frame{outline:2px solid var(--hand);outline-offset:0}
+  .board-frame iframe{display:block;width:100%;height:100%;border:0;background:#fff}
+  .note{position:absolute;background:var(--note);color:var(--noteink);padding:12px 14px;
+    font-size:12.5px;line-height:1.5;white-space:pre-wrap;cursor:grab;
+    box-shadow:0 2px 8px rgb(0 0 0/.35)}
+  .note[contenteditable=true]{outline:2px solid var(--hand);cursor:text}
+
+  #topbar{position:absolute;top:0;left:0;right:0;height:46px;display:flex;align-items:center;
+    gap:10px;padding:0 14px;pointer-events:none}
+  #topbar>*{pointer-events:auto}
+  #doc-title{color:var(--muted);font-size:13px}
+  #topbar .sp{flex:1}
+  #t-toggle{width:30px;height:26px;border-radius:6px;display:grid;place-items:center;
+    background:var(--accent);color:#fff}
+  #t-save{padding:5px 14px;border-radius:7px;border:1px solid var(--line);color:var(--ink)}
+  #t-save:hover{background:var(--field)}
+
+  #bar{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);display:flex;
+    align-items:center;gap:2px;padding:4px;background:var(--side);border:1px solid var(--line);
+    border-radius:9px;box-shadow:0 6px 20px rgb(0 0 0/.4)}
+  #bar button{padding:5px 10px;border-radius:6px;color:var(--muted)}
+  #bar button:hover{background:var(--field);color:var(--ink)}
+  #zoom{min-width:46px;text-align:center;color:var(--muted);font-variant-numeric:tabular-nums}
+  #bar .sep{width:1px;height:16px;background:var(--line);margin:0 4px}
+  #pages{padding:4px 8px;border-radius:6px;color:var(--muted)}
+
+  /* ---- sidebar ---- */
+  #side{width:330px;flex:none;background:var(--side);border-left:1px solid var(--line2);
+    display:flex;flex-direction:column;overflow:hidden}
+  body.no-side #side{display:none}
+  #tabs{display:flex;gap:20px;padding:14px 18px 12px;border-bottom:1px solid var(--line2)}
+  #tabs button{color:var(--dim);font-size:14px;padding:0}
+  #tabs button.on{color:#fff;font-weight:600}
+  #tools{display:flex;gap:2px;padding:8px 10px;border-bottom:1px solid var(--line2)}
+  #tools button{width:36px;height:32px;border-radius:7px;display:grid;place-items:center;
+    color:var(--muted)}
+  #tools button:hover{background:var(--field);color:var(--ink)}
+  #tools button.on{background:var(--field2);color:#fff;box-shadow:inset 0 0 0 1px var(--line)}
+
+  #tree{max-height:230px;min-height:120px;overflow:auto;padding:8px 0;
+    border-bottom:1px solid var(--line2);resize:vertical}
+  .tr{display:flex;align-items:center;gap:6px;padding:3px 14px 3px 0;cursor:default;
+    white-space:nowrap}
+  .tr:hover{background:#2a2a2a}
+  .tr.on{background:var(--row)}
+  .tr .cv{width:14px;flex:none;display:grid;place-items:center;color:var(--dim);cursor:pointer}
+  .tr .gl{width:14px;flex:none;display:grid;place-items:center;color:var(--dim)}
+  .tr .nm{flex:1;overflow:hidden;text-overflow:ellipsis;font-size:13px}
+  .tr.ab .nm{font-size:14px}
+  .tr .rt{color:var(--dim);font-size:12px;flex:none}
+
+  #props{flex:1;overflow-y:auto}
+  #props .sec{border-bottom:1px solid var(--line2);padding:14px}
+  #props .sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  #props .sh b{font-weight:500;font-size:14px}
+  #props .sh .rs{color:var(--dim);font-size:13px;cursor:pointer}
+  #props .sh .rs:hover{color:var(--ink)}
+  #props .g{display:flex;gap:8px;margin-bottom:8px}
+  .f{flex:1;display:flex;align-items:center;gap:8px;background:var(--field);
+    border:1px solid var(--line);border-radius:8px;padding:7px 11px;min-width:0}
+  .f .lb{color:var(--muted);flex:none;display:flex;align-items:center;gap:6px}
+  .f .lb i{width:5px;height:5px;border-radius:50%;background:#6b8fd4;display:none}
+  .f.set .lb i{display:block}
+  .f input{flex:1;text-align:right;font-variant-numeric:tabular-nums}
+  .f .u{color:var(--dim);flex:none}
+  .f .sw{width:18px;height:18px;border-radius:5px;border:1px solid var(--line);flex:none;
+    padding:0;overflow:hidden}
+  .f select{color:var(--ink);text-align:right;flex:1;cursor:pointer}
+  .seg{display:flex;background:var(--field);border:1px solid var(--line);border-radius:8px;
+    padding:2px;gap:2px}
+  .seg button{flex:1;padding:5px 8px;border-radius:6px;color:var(--muted);font-size:12.5px}
+  .seg button.on{background:var(--field2);color:#fff}
+  .seg.ic button{display:grid;place-items:center;padding:5px 0}
+  #props .add{color:var(--dim);font-size:12.5px;margin-top:2px}
+  #props .add span{cursor:pointer}
+  #props .add span:hover{color:var(--ink)}
+  #props .empty{padding:60px 24px;text-align:center;color:var(--dim);line-height:1.7}
+  #props .empty b{display:block;color:var(--muted);font-weight:400;font-size:14px;
+    margin-bottom:4px}
+  #props textarea{width:100%;background:var(--field);border:1px solid var(--line);
+    border-radius:8px;padding:8px 10px;color:var(--ink);font:inherit;resize:vertical;
+    min-height:66px}
+
+  #focus{position:fixed;inset:0;z-index:30;background:var(--bg);display:none}
+  #focus.on{display:block}
+  #focus iframe{width:100%;height:100%;border:0;background:#fff}
+  #focus-close{position:fixed;top:14px;right:14px;z-index:31;padding:6px 14px;
+    background:var(--side);border:1px solid var(--line);border-radius:7px}
+  #print-out{position:absolute;left:-100000px;top:0;width:1px;height:1px;overflow:hidden}
+  #print-out iframe{border:0;display:block}
+  @media print{
+    #app,#topbar,#bar,#focus{display:none!important}
+    #print-out{position:static!important;left:auto!important;width:auto!important;
+      height:auto!important;overflow:visible!important}
+    #print-out .p{page-break-after:always}
   }
-  * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; overflow: hidden; }
-  body {
-    background: var(--bg); color: var(--ink);
-    font: 13px/1.45 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
-    -webkit-font-smoothing: antialiased;
-  }
-  #viewport { position: fixed; inset: 0; cursor: grab; overflow: hidden;
-    background-image: radial-gradient(var(--grid) 1px, transparent 1px);
-    background-size: 24px 24px; }
-  #viewport.panning { cursor: grabbing; }
-  #world { position: absolute; top: 0; left: 0; transform-origin: 0 0; will-change: transform; }
-
-  .board { position: absolute; }
-  .board-strip { display: flex; align-items: center; gap: 8px; height: 22px;
-    font-size: 12px; color: var(--muted); user-select: none; cursor: default; }
-  .board-strip b { font-weight: 500; color: var(--ink); }
-  .board-strip .tag { font-size: 10px; letter-spacing: .04em; text-transform: uppercase;
-    padding: 1px 5px; border: 1px solid var(--line); border-radius: 3px; }
-  .board-frame { background: var(--panel); border: 1px solid var(--line); border-radius: 4px;
-    overflow: hidden; box-shadow: 0 1px 2px rgb(0 0 0 / .06), 0 8px 24px rgb(0 0 0 / .04); }
-  .board.selected .board-frame { border-color: var(--sel); box-shadow: 0 0 0 2px var(--sel); }
-  .board.selected .board-strip b { color: var(--sel); }
-  .board-frame iframe { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
-
-  .note { position: absolute; background: var(--note); border: 1px solid var(--note-line);
-    border-radius: 3px; padding: 10px 12px; font-size: 13px; white-space: pre-wrap;
-    box-shadow: 0 2px 6px rgb(0 0 0 / .08); cursor: default; }
-
-  #bar { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%);
-    display: flex; align-items: center; gap: 4px; padding: 5px;
-    background: var(--panel); border: 1px solid var(--line); border-radius: 9px;
-    box-shadow: 0 4px 16px rgb(0 0 0 / .1); z-index: 10; }
-  #bar button, #bar select { font: inherit; color: var(--ink); background: transparent;
-    border: 0; border-radius: 5px; padding: 5px 9px; cursor: pointer; }
-  #bar button:hover, #bar select:hover { background: var(--bg); }
-  #bar .sep { width: 1px; height: 18px; background: var(--line); margin: 0 3px; }
-  #zoom { min-width: 46px; text-align: center; color: var(--muted); font-variant-numeric: tabular-nums; }
-  #title { position: fixed; top: 16px; left: 18px; font-size: 13px; font-weight: 500; z-index: 10;
-    padding: 5px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; }
-
-  #panel { position: fixed; top: 0; right: 0; bottom: 0; width: 268px; z-index: 15;
-    background: var(--panel); border-left: 1px solid var(--line);
-    display: none; flex-direction: column; overflow: hidden; }
-  #panel.on { display: flex; }
-  #panel header { display: flex; align-items: center; justify-content: space-between;
-    padding: 11px 12px; border-bottom: 1px solid var(--line); font-weight: 500; }
-  #panel header button { border: 0; background: transparent; font: inherit; cursor: pointer;
-    color: var(--muted); padding: 2px 6px; border-radius: 4px; }
-  #panel header button:hover { background: var(--bg); color: var(--ink); }
-  #panel .body { overflow-y: auto; padding: 4px 0 20px; }
-  #panel .grp { padding: 10px 12px 4px; font-size: 10px; letter-spacing: .07em;
-    text-transform: uppercase; color: var(--muted); }
-  #panel .row { display: grid; grid-template-columns: 78px 1fr; gap: 8px; align-items: center;
-    padding: 3px 12px; }
-  #panel .row label { color: var(--muted); font-size: 12px; overflow: hidden;
-    text-overflow: ellipsis; }
-  #panel input, #panel select, #panel textarea { font: inherit; width: 100%; min-width: 0;
-    color: var(--ink); background: var(--bg); border: 1px solid var(--line);
-    border-radius: 4px; padding: 4px 6px; }
-  #panel input[type=color] { padding: 1px; height: 26px; cursor: pointer; }
-  #panel textarea { resize: vertical; min-height: 62px; font-size: 12px; }
-  #panel .tagline { padding: 8px 12px; color: var(--muted); font-size: 12px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
-  #panel .empty { padding: 24px 14px; color: var(--muted); text-align: center; line-height: 1.6; }
-  #bar { max-width: calc(100vw - 24px); overflow-x: auto; }
-  body.has-panel #bar { transform: translateX(calc(-50% - 134px));
-    max-width: calc(100vw - 292px); }
-
-  #ink { position: absolute; top: 0; left: 0; overflow: visible; pointer-events: none; }
-  #viewport.pen { cursor: crosshair; }
-  #viewport.noting { cursor: copy; }
-  #bar button.active { background: var(--sel); color: #fff; }
-  .note[contenteditable="true"] { outline: 2px solid var(--sel); cursor: text; }
-  .note { cursor: grab; }
-
-  #focus { position: fixed; inset: 0; z-index: 20; background: var(--bg); display: none; }
-  #focus.on { display: block; }
-  #focus iframe { width: 100%; height: 100%; border: 0; background: #fff; }
-  #focus-close { position: fixed; top: 14px; right: 14px; z-index: 21; }
-
-  @media print {
-    #bar, #title, #viewport, #panel, #focus { display: none !important; }
-    #print-out { position: static !important; left: auto !important; width: auto !important;
-      height: auto !important; overflow: visible !important; }
-  }
-  /* Off-screen, not display:none - a none-d iframe never lays out, so it prints blank. */
-  #print-out { position: absolute; left: -100000px; top: 0; width: 1px; height: 1px;
-    overflow: hidden; }
-  #print-out .p { page-break-after: always; }
-  #print-out iframe { border: 0; display: block; }
 </style>
 </head>
 <body>
-
-<div id="title">__CANVAS_TITLE__</div>
-<div id="viewport"><div id="world"><svg id="ink"></svg></div></div>
-
-<aside id="panel">
-  <header><span id="panel-title">Element</span><button id="panel-close">Done</button></header>
-  <div class="body" id="panel-body"><div class="empty">Click an element in an artboard to edit it.</div></div>
-</aside>
+<div id="app">
+  <div id="stage">
+    <div id="viewport"><div id="world"><svg id="ink"></svg></div></div>
+    <div id="topbar">
+      <span id="doc-title">__CANVAS_TITLE__</span><span class="sp"></span>
+      <button id="t-toggle" title="Toggle sidebar"></button>
+      <button id="t-save">Save</button>
+    </div>
+    <div id="bar">
+      <select id="pages" hidden></select><span class="sep" id="pages-sep" hidden></span>
+      <button id="zoom-out">&minus;</button><span id="zoom">100%</span>
+      <button id="zoom-in">+</button><button id="fit">Fit</button>
+      <span class="sep"></span><button id="print">Export PDF</button>
+    </div>
+  </div>
+  <aside id="side">
+    <div id="tabs">
+      <button class="on" data-tab="edit">Edit</button>
+      <button data-tab="code">Code</button>
+      <button data-tab="tweaks">Tweaks</button>
+    </div>
+    <div id="tools"></div>
+    <div id="tree"></div>
+    <div id="props"></div>
+  </aside>
+</div>
 <div id="focus"><button id="focus-close">Close</button></div>
 <div id="print-out"></div>
 
-<div id="bar">
-  <select id="pages" hidden></select>
-  <span class="sep" id="pages-sep" hidden></span>
-  <button id="zoom-out" title="Zoom out">&minus;</button>
-  <span id="zoom">100%</span>
-  <button id="zoom-in" title="Zoom in">+</button>
-  <button id="fit">Fit</button>
-  <span class="sep"></span>
-  <button id="pick" title="Select and edit elements (V)">Select</button>
-  <button id="note" title="Add a note (N)">Note</button>
-  <button id="pen" title="Draw (D)">Draw</button>
-  <button id="erase" title="Clear drawing">Clear</button>
-  <span class="sep"></span>
-  <button id="save" title="Download the updated canvas">Save</button>
-  <button id="print">Export PDF</button>
-</div>
-
 <script id="canvas-doc" type="application/json">__CANVAS_STATE__</script>
-
 <script>
 (() => {
-  "use strict";
-  const raw = document.getElementById("canvas-doc").textContent;
-  const DOC = JSON.parse(raw.replace(/<\\\/script/g, "</scr" + "ipt").replace(/<\\!--/g, "<" + "!--"));
-  const files = DOC.files || {};
-  const manifest = DOC.canvas || {};
-  const boards = manifest.artboards || [];
-  const notes = manifest.notes || [];
-  const pages = manifest.pages || [];
+"use strict";
+const raw = document.getElementById("canvas-doc").textContent;
+const DOC = JSON.parse(raw.replace(/<\\\/script/g, "</scr" + "ipt").replace(/<\\!--/g, "<" + "!--"));
+const files = DOC.files || {};
+const manifest = DOC.canvas || {};
+const boards = manifest.artboards || [];
+const notes = manifest.notes || (manifest.notes = []);
+const drawings = manifest.drawings || (manifest.drawings = []);
+const pages = manifest.pages || [];
 
-  const IMG = /\.(png|jpe?g|gif|webp|avif|bmp|svg)$/i;
-  const MIME = { png:"image/png", jpg:"image/jpeg", jpeg:"image/jpeg", gif:"image/gif",
-                 webp:"image/webp", avif:"image/avif", bmp:"image/bmp", svg:"image/svg+xml" };
+const IMG=/\.(png|jpe?g|gif|webp|avif|bmp|svg)$/i;
+const MIME={png:"image/png",jpg:"image/jpeg",jpeg:"image/jpeg",gif:"image/gif",webp:"image/webp",
+  avif:"image/avif",bmp:"image/bmp",svg:"image/svg+xml"};
 
+/* Never emit the literal "<" + "!--" or "<scr" + "ipt" inside this block: together they put the
+   HTML parser into script-data-double-escaped state, the closing tag stops closing, and the
+   whole script is silently never executed. */
+const AGENT = "<scr" + "ipt data-dc-agent>(()=>{" + `
+const P=(el)=>{const p=[];while(el&&el!==document.documentElement){const q=el.parentNode;if(!q)break;p.unshift([...q.children].indexOf(el));el=q;}return p;};
+const E=(p)=>{let el=document.documentElement;for(const i of p){if(!el||!el.children[i])return null;el=el.children[i];}return el;};
+let cur=null,on=false,tool=null;
+const box=document.createElement('div'),hov=document.createElement('div');
+const HB='position:absolute;pointer-events:none;z-index:2147483647;';
+box.style.cssText=HB+'outline:2px solid #e0568c;display:none';
+hov.style.cssText=HB+'outline:1px solid rgba(224,86,140,.55);display:none';
+box.dataset.dcUi='1';hov.dataset.dcUi='1';
+const mount=()=>document.body&&document.body.append(box,hov);
+if(document.body)mount();else addEventListener('DOMContentLoaded',mount);
+const place=(n,el)=>{if(!el){n.style.display='none';return;}const r=el.getBoundingClientRect();
+  n.style.display='block';n.style.left=(r.left+scrollX)+'px';n.style.top=(r.top+scrollY)+'px';
+  n.style.width=r.width+'px';n.style.height=r.height+'px';};
+const nameOf=(el)=>{const c=getComputedStyle(el);
+  if(el.children.length===0&&el.textContent.trim())return el.textContent.trim().slice(0,26);
+  if(c.display==='grid')return 'Grid';
+  if(c.display==='flex'||c.display==='inline-flex')return c.flexDirection.startsWith('column')?'Column':'Row';
+  return 'group';};
+const tree=(el,d)=>{const r=el.getBoundingClientRect();
+  const o={name:nameOf(el),tag:el.tagName.toLowerCase(),path:P(el),w:Math.round(r.width),h:Math.round(r.height),kids:[]};
+  if(d<9)for(const c of el.children){if(c.dataset&&c.dataset.dcUi)continue;
+    if(['SCRIPT','STYLE','LINK','META','TITLE'].includes(c.tagName))continue;o.kids.push(tree(c,d+1));}
+  return o;};
+const info=(el)=>{const c=getComputedStyle(el),o={};
+  for(const k of ['color','backgroundColor','fontSize','fontWeight','lineHeight','letterSpacing',
+    'textAlign','paddingTop','paddingRight','paddingBottom','paddingLeft','marginTop','marginLeft',
+    'width','height','borderRadius','borderWidth','borderColor','borderStyle','overflow','opacity',
+    'display','flexDirection','flexWrap','gap','justifyContent','alignItems','position','top','left','zIndex'])o[k]=c[k];
+  return{tag:el.tagName.toLowerCase(),name:nameOf(el),path:P(el),styles:o,
+    inline:el.getAttribute('style')||'',text:el.children.length===0?el.textContent:null};};
+addEventListener('message',(e)=>{const m=e.data||{};
+  if(m.t==='mode'){on=!!m.on;if(!on){box.style.display='none';hov.style.display='none';}}
+  else if(m.t==='tree'){parent.postMessage({t:'tree',id:m.id,tree:document.body?tree(document.body,0):null},'*');}
+  else if(m.t==='pick'){const el=E(m.path);if(el){cur=el;place(box,el);parent.postMessage({t:'sel',...info(el)},'*');}}
+  else if(m.t==='style'){const el=E(m.path);if(el){el.style[m.prop]=m.value;place(box,el);
+    parent.postMessage({t:'sel',...info(el)},'*');}}
+  else if(m.t==='text'){const el=E(m.path);if(el){el.textContent=m.value;place(box,el);}}
+  else if(m.t==='serialize'){const c=document.documentElement.cloneNode(true);
+    c.querySelectorAll('[data-dc-agent],[data-dc-ui]').forEach(n=>n.remove());
+    parent.postMessage({t:'html',id:m.id,html:'<!doct'+'ype html>\\n'+c.outerHTML},'*');}
+  else if(m.t==='tool'){tool=m.name;}
+  else if(m.t==='deselect'){box.style.display='none';cur=null;}});
+addEventListener('mouseover',(e)=>{if(on&&e.target!==cur)place(hov,e.target);},true);
+addEventListener('mouseout',()=>{hov.style.display='none';},true);
+addEventListener('click',(e)=>{if(!on)return;e.preventDefault();e.stopPropagation();
+  let t=e.target;
+  if(tool){const n=document.createElement('div');
+    if(tool==='text'){n.textContent='Text';n.setAttribute('style','font-size:16px;color:#111');}
+    else if(tool==='rect'){n.setAttribute('style','width:160px;height:90px;background:#d9d4cc;border-radius:8px');}
+    else if(tool==='ellipse'){n.setAttribute('style','width:120px;height:120px;background:#d9d4cc;border-radius:50%');}
+    const host=t.children.length||t===document.body?t:t.parentNode;host.append(n);t=n;}
+  cur=t;place(box,cur);hov.style.display='none';parent.postMessage({t:'sel',...info(cur)},'*');},true);
+addEventListener('scroll',()=>{if(cur)place(box,cur);},true);
+})();` + "</scr" + "ipt>";
 
-  // Injected into every artboard. The host cannot reach into the iframe (opaque origin),
-  // so all selection and editing happens here and travels by postMessage.
-  const AGENT = `<scr` + `ipt data-dc-agent>(()=>{
-  const P=(el)=>{const p=[];while(el&&el!==document.documentElement){const par=el.parentNode;if(!par)break;p.unshift([...par.children].indexOf(el));el=par;}return p;};
-  const E=(p)=>{let el=document.documentElement;for(const i of p){if(!el||!el.children[i])return null;el=el.children[i];}return el;};
-  let cur=null,on=false;
-  const box=document.createElement('div');
-  box.style.cssText='position:absolute;pointer-events:none;z-index:2147483647;border:2px solid #b45309;border-radius:2px;display:none';
-  const hov=document.createElement('div');
-  hov.style.cssText='position:absolute;pointer-events:none;z-index:2147483646;border:1px solid rgba(180,83,9,.5);display:none';
-  addEventListener('DOMContentLoaded',()=>{document.body.append(box,hov);});
-  const place=(n,el)=>{if(!el){n.style.display='none';return;}const r=el.getBoundingClientRect();
-    n.style.cssText+=';display:block';n.style.left=(r.left+scrollX-2)+'px';n.style.top=(r.top+scrollY-2)+'px';
-    n.style.width=r.width+'px';n.style.height=r.height+'px';};
-  const info=(el)=>{const c=getComputedStyle(el);const o={};
-    for(const k of ['color','backgroundColor','fontSize','fontWeight','lineHeight','letterSpacing','textAlign','padding','margin','width','height','borderRadius','border','display','flexDirection','gap','justifyContent','alignItems','opacity'])o[k]=c[k];
-    const kids=[...el.children].length;
-    return{tag:el.tagName.toLowerCase(),path:P(el),styles:o,inline:el.getAttribute('style')||'',
-      text:kids===0?el.textContent:null};};
-  addEventListener('message',(e)=>{const m=e.data||{};
-    if(m.t==='mode'){on=!!m.on;if(!on){box.style.display='none';hov.style.display='none';cur=null;}}
-    else if(m.t==='style'){const el=E(m.path);if(el){el.style[m.prop]=m.value;place(box,el);
-      parent.postMessage({t:'sel',...info(el)},'*');}}
-    else if(m.t==='text'){const el=E(m.path);if(el){el.textContent=m.value;place(box,el);}}
-    else if(m.t==='serialize'){const c=document.documentElement.cloneNode(true);
-      c.querySelectorAll('[data-dc-agent]').forEach(n=>n.remove());
-      const b=c.querySelector('body');
-      if(b){[...b.children].forEach(n=>{if(n.style&&n.style.zIndex==='2147483647'||n.style&&n.style.zIndex==='2147483646')n.remove();});}
-      parent.postMessage({t:'html',id:m.id,html:'<!doctype html>\\n'+c.outerHTML},'*');}
-    else if(m.t==='deselect'){box.style.display='none';cur=null;}});
-  addEventListener('mouseover',(e)=>{if(!on)return;if(e.target!==cur)place(hov,e.target);},true);
-  addEventListener('mouseout',()=>{hov.style.display='none';},true);
-  addEventListener('click',(e)=>{if(!on)return;e.preventDefault();e.stopPropagation();
-    cur=e.target;place(box,cur);hov.style.display='none';parent.postMessage({t:'sel',...info(cur)},'*');},true);
-  addEventListener('scroll',()=>{if(cur)place(box,cur);},true);
-  })();</scr` + `ipt>`;
-
-  // Inline every image files-entry into an artboard's source, by bare filename.
-  function resolve(src, withAgent) {
-    let out = src;
-    for (const [name, data] of Object.entries(files)) {
-      if (!IMG.test(name)) continue;
-      const ext = name.split(".").pop().toLowerCase();
-      const uri = "data:" + (MIME[ext] || "application/octet-stream") + ";base64," + data;
-      const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      out = out.replace(new RegExp('src="\\.?/?' + esc + '"', "g"), 'src="' + uri + '"');
-      out = out.replace(new RegExp("url\\((['\"]?)\\.?/?" + esc + "\\1\\)", "g"), "url(" + uri + ")");
-    }
-    return withAgent === false ? out : out + AGENT;
+function resolve(src, withAgent) {
+  let out = src;
+  for (const [name, data] of Object.entries(files)) {
+    if (!IMG.test(name)) continue;
+    const ext = name.split(".").pop().toLowerCase();
+    const uri = "data:" + (MIME[ext] || "application/octet-stream") + ";base64," + data;
+    const esc = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    out = out.replace(new RegExp('src="\\.?/?' + esc + '"', "g"), 'src="' + uri + '"');
+    out = out.replace(new RegExp("url\\((['\"]?)\\.?/?" + esc + "\\1\\)", "g"), "url(" + uri + ")");
   }
+  return withAgent === false ? out : out + AGENT;
+}
 
-  const world = document.getElementById("world");
-  const viewport = document.getElementById("viewport");
-  let view = { x: 80, y: 80, k: 1 };
-  let page = null;
-  let touched = false;   // set once the user pans or zooms; stops auto-refit
+/* ---- icons ---------------------------------------------------------------- */
+const S = (d, x) => '<svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>';
+const ICON = {
+  select: S('<path d="M4 2.5 L4 15 L7.2 11.8 L9.4 16.5 L11.6 15.5 L9.4 11 L14 10.6 Z" fill="currentColor" stroke-width="1"/>'),
+  text:   S('<path d="M4 5V3.5h12V5M10 3.5v13M7.5 16.5h5"/>'),
+  frame:  S('<path d="M6.5 2v16M13.5 2v16M2 6.5h16M2 13.5h16"/>'),
+  note:   S('<path d="M3.5 3.5h13v8l-5 5h-8z"/><path d="M16.5 11.5h-5v5"/>'),
+  rect:   S('<rect x="3" y="5" width="14" height="10" rx="2"/>'),
+  ellipse:S('<circle cx="10" cy="10" r="6.5"/>'),
+  arrow:  S('<path d="M4.5 15.5 L15.5 4.5M9 4.5h6.5V11"/>'),
+  pen:    S('<path d="M3 17l1.6-4.2L13.4 4l3 3-8.8 8.8z"/>'),
+  chev:   '<svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4l6 6-6 6"/></svg>',
+  boxg:   '<svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 2"><rect x="3" y="3" width="14" height="14" rx="2"/></svg>',
+  boxs:   '<svg width="11" height="11" viewBox="0 0 20 20"><rect x="3" y="8" width="14" height="4" rx="1" fill="currentColor"/></svg>',
+  play:   S('<path d="M6 4l9 6-9 6z"/>'),
+  down:   S('<path d="M10 3v10M6 9.5l4 4 4-4M4 16.5h12"/>'),
+  side:   '<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="4" width="15" height="12" rx="2"/><path d="M12.5 4v12"/></svg>',
+};
+const TOOLS = [["select","Select","v"],["text","Text","t"],["frame","Artboard","f"],
+  ["note","Note","n"],["rect","Rectangle","r"],["ellipse","Ellipse","o"],
+  ["arrow","Arrow","a"],["pen","Draw","d"]];
 
-  const onPage = (o) => !pages.length || (o.page || pages[0].id) === page;
+const $ = (s) => document.querySelector(s);
+const world = $("#world"), viewport = $("#viewport"), ink = $("#ink");
+const treeEl = $("#tree"), propsEl = $("#props");
+let view = { x: 80, y: 80, k: 1 }, page = null, touched = false;
+let mode = "select", sel = null, trees = new Map(), open = new Set(), boardSel = null;
+const frames = new Map();
+const onPage = (o) => !pages.length || (o.page || pages[0].id) === page;
+const tellAgent = (f, m) => { try { f.contentWindow.postMessage(m, "*"); } catch {} };
+const bcast = (m) => { for (const f of frames.values()) tellAgent(f, m); };
 
-  const frames = new Map();   // file -> iframe
-  function render() {
-    world.querySelectorAll(".board, .note").forEach(n => n.remove());
-    frames.clear();
-    for (const b of boards) {
-      if (!onPage(b)) continue;
-      const src = files[b.file];
-      if (src === undefined) continue;
-      const el = document.createElement("div");
-      el.className = "board";
-      el.style.cssText = `left:${b.x||0}px;top:${b.y||0}px;width:${b.w||800}px`;
-      const strip = document.createElement("div");
-      strip.className = "board-strip";
-      const nm = document.createElement("b");
-      nm.textContent = b.title || b.file.replace(/\.html$/i, "");
-      strip.append(nm);
-      if (b.interactive) { const t = document.createElement("span"); t.className = "tag";
-        t.textContent = "interactive"; strip.append(t); }
-      const frame = document.createElement("div");
-      frame.className = "board-frame";
-      frame.style.height = (b.h || 600) + "px";
-      const f = document.createElement("iframe");
-      f.setAttribute("sandbox", "allow-scripts");   // no allow-same-origin: opaque origin
-      f.setAttribute("loading", "lazy");
-      f.srcdoc = resolve(src);
-      f.style.pointerEvents = mode === "pick" ? "auto" : "none";
-      f.addEventListener("load", () => tellAgent(f, { t: "mode", on: mode === "pick" }));
-      frames.set(b.file, f);
-      frame.append(f);
-      el.append(strip, frame);
-      el.addEventListener("pointerdown", (e) => {
-        if (e.target.closest(".board-frame")) return;
-        document.querySelectorAll(".board.selected").forEach(n => n.classList.remove("selected"));
-        el.classList.add("selected"); e.stopPropagation();
-      });
-      el.addEventListener("dblclick", (e) => {
-        if (e.target.closest(".board-frame")) return;
-        focusOn(b);
-      });
-      world.append(el);
-    }
-    for (const n of notes) {
-      if (!onPage(n)) continue;
-      const el = document.createElement("div");
-      el.className = "note";
-      el.dataset.id = n.id;
-      el.style.cssText = `left:${n.x||0}px;top:${n.y||0}px;width:${n.w||220}px`;
-      el.textContent = n.text || "";
-      wireNote(el, n);
-      world.append(el);
-    }
-    apply();
+/* ---- toolbar -------------------------------------------------------------- */
+const toolsEl = $("#tools");
+for (const [id, label, key] of TOOLS) {
+  const b = document.createElement("button");
+  b.dataset.tool = id; b.title = label + " (" + key.toUpperCase() + ")";
+  b.innerHTML = ICON[id];
+  b.onclick = () => setMode(id);
+  toolsEl.append(b);
+}
+function setMode(m) {
+  mode = m;
+  toolsEl.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.tool === m));
+  viewport.classList.toggle("pen", m === "pen" || m === "arrow");
+  viewport.classList.toggle("noting", m === "note");
+  const inFrame = ["select","text","rect","ellipse"].includes(m);
+  for (const f of frames.values()) {
+    f.style.pointerEvents = inFrame ? "auto" : "none";
+    tellAgent(f, { t: "mode", on: inFrame });
+    tellAgent(f, { t: "tool", name: m === "select" ? null : m });
   }
+  if (m === "frame") addArtboard();
+}
+addEventListener("keydown", (e) => {
+  if (e.target.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+  const t = TOOLS.find(t => t[2] === e.key.toLowerCase());
+  if (t) setMode(t[0]);
+  if (e.key === "Escape") { $("#focus").classList.remove("on"); deselect(); }
+});
 
-  const apply = () => {
-    world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.k})`;
-    document.getElementById("zoom").textContent = Math.round(view.k * 100) + "%";
-  };
-
-  // ---- pan / zoom -----------------------------------------------------------
-  let drag = null;
-  viewport.addEventListener("pointerdown", (e) => {
-    if (mode === "pen") return penDown(e);
-    if (mode === "note" && !e.target.closest(".note")) return placeNote(e);
-    if (e.target.closest(".board") || e.target.closest(".note")) return;
-    document.querySelectorAll(".board.selected").forEach(n => n.classList.remove("selected"));
-    touched = true;
-    drag = { x: e.clientX - view.x, y: e.clientY - view.y };
-    viewport.classList.add("panning");
-    viewport.setPointerCapture(e.pointerId);
-  });
-  viewport.addEventListener("pointermove", (e) => {
-    if (!drag) return;
-    view.x = e.clientX - drag.x; view.y = e.clientY - drag.y; apply();
-  });
-  const endPan = () => { drag = null; viewport.classList.remove("panning"); };
-  viewport.addEventListener("pointerup", endPan);
-  viewport.addEventListener("pointercancel", endPan);
-
-  viewport.addEventListener("wheel", (e) => {
-    e.preventDefault();
-    touched = true;
-    const f = e.ctrlKey || e.metaKey ? 0.01 : 0.0025;
-    const k = Math.min(4, Math.max(0.05, view.k * Math.exp(-e.deltaY * f)));
-    view.x = e.clientX - (e.clientX - view.x) * (k / view.k);
-    view.y = e.clientY - (e.clientY - view.y) * (k / view.k);
-    view.k = k; apply();
-  }, { passive: false });
-
-  function bounds() {
-    const items = [...boards.filter(onPage).map(b => ({ x: b.x||0, y: (b.y||0) - 26,
-                     w: b.w||800, h: (b.h||600) + 26 })),
-                   ...notes.filter(onPage).map(n => ({ x: n.x||0, y: n.y||0, w: n.w||220, h: 90 }))];
-    if (!items.length) return null;
-    return items.reduce((a, i) => ({
-      x1: Math.min(a.x1, i.x), y1: Math.min(a.y1, i.y),
-      x2: Math.max(a.x2, i.x + i.w), y2: Math.max(a.y2, i.y + i.h)
-    }), { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity });
-  }
-  function fit() {
-    const b = bounds(); if (!b) return;
-    const pad = 64, W = innerWidth - pad * 2, H = innerHeight - pad * 2 - 60;
-    view.k = Math.min(2, Math.max(0.05, Math.min(W / (b.x2 - b.x1), H / (b.y2 - b.y1))));
-    view.x = pad + (W - (b.x2 - b.x1) * view.k) / 2 - b.x1 * view.k;
-    view.y = pad + (H - (b.y2 - b.y1) * view.k) / 2 - b.y1 * view.k;
-    apply();
-  }
-
-  // ---- focus mode -----------------------------------------------------------
-  const focusEl = document.getElementById("focus");
-  function focusOn(b) {
-    focusEl.querySelectorAll("iframe").forEach(n => n.remove());
+/* ---- canvas render -------------------------------------------------------- */
+function render() {
+  world.querySelectorAll(".board, .note").forEach(n => n.remove());
+  frames.clear();
+  for (const b of boards) {
+    if (!onPage(b) || files[b.file] === undefined) continue;
+    const el = document.createElement("div");
+    el.className = "board"; el.dataset.file = b.file;
+    el.style.cssText = `left:${b.x||0}px;top:${(b.y||0)-26}px;width:${b.w||800}px`;
+    const strip = document.createElement("div");
+    strip.className = "board-strip";
+    const nm = document.createElement("div");
+    nm.className = "nm"; nm.textContent = b.title || b.file.replace(/\.html$/i, "");
+    const ic = document.createElement("div"); ic.className = "ic";
+    const bp = document.createElement("button"); bp.innerHTML = ICON.play; bp.title = "Open";
+    bp.onclick = (ev) => { ev.stopPropagation(); focusOn(b); };
+    const bd = document.createElement("button"); bd.innerHTML = ICON.down; bd.title = "Download";
+    bd.onclick = (ev) => { ev.stopPropagation(); dl(b.file); };
+    ic.append(bp, bd); strip.append(nm, ic);
+    const frame = document.createElement("div");
+    frame.className = "board-frame"; frame.style.height = (b.h || 600) + "px";
     const f = document.createElement("iframe");
     f.setAttribute("sandbox", "allow-scripts");
     f.srcdoc = resolve(files[b.file]);
-    focusEl.append(f); focusEl.classList.add("on");
-  }
-  document.getElementById("focus-close").onclick = () => focusEl.classList.remove("on");
-  addEventListener("keydown", (e) => { if (e.key === "Escape") focusEl.classList.remove("on"); });
-
-  // ---- print / PDF ----------------------------------------------------------
-  document.getElementById("print").onclick = () => {
-    const out = document.getElementById("print-out");
-    out.textContent = "";
-    for (const b of boards) {
-      if (!onPage(b)) continue;
-      const src = files[b.file]; if (src === undefined) continue;
-      const wrap = document.createElement("div");
-      wrap.className = "p";
-      const f = document.createElement("iframe");
-      f.setAttribute("sandbox", "allow-scripts");
-      f.width = b.w || 800; f.height = b.h || 600;
-      f.srcdoc = resolve(src, false);
-      wrap.append(f); out.append(wrap);
-    }
-    setTimeout(() => print(), 400);
-  };
-
-  // ---- pages ----------------------------------------------------------------
-  const pagesSel = document.getElementById("pages");
-  if (pages.length) {
-    for (const p of pages) {
-      const o = document.createElement("option"); o.value = p.id; o.textContent = p.name;
-      pagesSel.append(o);
-    }
-    pagesSel.hidden = false; document.getElementById("pages-sep").hidden = false;
-    pagesSel.onchange = () => { page = pagesSel.value; touched = false; render(); paintInk(); fit(); };
-  }
-
-  document.getElementById("zoom-in").onclick = () => { touched = true; view.k = Math.min(4, view.k * 1.25); apply(); };
-  document.getElementById("zoom-out").onclick = () => { touched = true; view.k = Math.max(0.05, view.k / 1.25); apply(); };
-  document.getElementById("fit").onclick = () => { touched = false; fit(); };
-
-  // Refit while the view is untouched, so a resized window never leaves artboards clipped.
-  let rt = null;
-  addEventListener("resize", () => {
-    if (touched) return;
-    clearTimeout(rt);
-    rt = setTimeout(fit, 120);
-  });
-
-
-  // ---- modes ----------------------------------------------------------------
-  let mode = "pan";
-  const MODES = { pick: "pick", note: "note", pen: "pen" };
-  const tellAgent = (f, msg) => { try { f.contentWindow.postMessage(msg, "*"); } catch {} };
-
-  function setMode(m) {
-    mode = mode === m ? "pan" : m;
-    for (const id of Object.keys(MODES))
-      document.getElementById(id).classList.toggle("active", mode === id);
-    viewport.classList.toggle("pen", mode === "pen");
-    viewport.classList.toggle("noting", mode === "note");
-    for (const f of frames.values()) {
-      f.style.pointerEvents = mode === "pick" ? "auto" : "none";
-      tellAgent(f, { t: "mode", on: mode === "pick" });
-    }
-    if (mode !== "pick") closePanel();
-  }
-
-  // ---- properties panel -----------------------------------------------------
-  const SPEC = [
-    ["Text", [
-      ["color", "color", "Color"], ["fontSize", "len", "Size"],
-      ["fontWeight", "sel", "Weight", ["300","400","500","600","700","800"]],
-      ["lineHeight", "len", "Line height"], ["letterSpacing", "len", "Tracking"],
-      ["textAlign", "sel", "Align", ["left","center","right","justify"]],
-    ]],
-    ["Box", [
-      ["backgroundColor", "color", "Background"], ["padding", "len", "Padding"],
-      ["margin", "len", "Margin"], ["width", "len", "Width"], ["height", "len", "Height"],
-      ["borderRadius", "len", "Radius"], ["border", "len", "Border"],
-      ["opacity", "len", "Opacity"],
-    ]],
-    ["Layout", [
-      ["display", "sel", "Display", ["block","flex","grid","inline-block","inline-flex","none"]],
-      ["flexDirection", "sel", "Direction", ["row","column","row-reverse","column-reverse"]],
-      ["gap", "len", "Gap"],
-      ["justifyContent", "sel", "Justify", ["flex-start","center","flex-end","space-between","space-around"]],
-      ["alignItems", "sel", "Align items", ["stretch","flex-start","center","flex-end","baseline"]],
-    ]],
-  ];
-  const panel = document.getElementById("panel");
-  const panelBody = document.getElementById("panel-body");
-  let sel = null;   // { file, path, styles, text }
-
-  const toHex = (c) => {
-    const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/.exec(c || "");
-    if (!m) return null;
-    return "#" + [1,2,3].map(i => (+m[i]).toString(16).padStart(2, "0")).join("");
-  };
-  const closePanel = () => { panel.classList.remove("on"); document.body.classList.remove("has-panel");
-    if (sel && frames.get(sel.file)) tellAgent(frames.get(sel.file), { t: "deselect" });
-    sel = null; };
-
-  function push(prop, value) {
-    if (!sel) return;
-    const f = frames.get(sel.file); if (!f) return;
-    tellAgent(f, { t: "style", path: sel.path, prop, value });
-  }
-
-  function buildPanel(d) {
-    panelBody.textContent = "";
-    document.getElementById("panel-title").textContent = d.tag;
-    const tl = document.createElement("div");
-    tl.className = "tagline";
-    tl.textContent = sel.file.replace(/\.html$/i, "") + "  ·  <" + d.tag + ">";
-    panelBody.append(tl);
-
-    if (d.text !== null && d.text !== undefined) {
-      const g = document.createElement("div"); g.className = "grp"; g.textContent = "Content";
-      const r = document.createElement("div"); r.className = "row";
-      r.style.gridTemplateColumns = "1fr";
-      const ta = document.createElement("textarea");
-      ta.value = d.text;
-      ta.oninput = () => { const f = frames.get(sel.file);
-        if (f) tellAgent(f, { t: "text", path: sel.path, value: ta.value }); };
-      r.append(ta); panelBody.append(g, r);
-    }
-
-    for (const [group, props] of SPEC) {
-      const g = document.createElement("div"); g.className = "grp"; g.textContent = group;
-      panelBody.append(g);
-      for (const [prop, kind, label, opts] of props) {
-        const row = document.createElement("div"); row.className = "row";
-        const lb = document.createElement("label"); lb.textContent = label;
-        let input;
-        if (kind === "color") {
-          input = document.createElement("input"); input.type = "color";
-          input.value = toHex(d.styles[prop]) || "#000000";
-          input.oninput = () => push(prop, input.value);
-        } else if (kind === "sel") {
-          input = document.createElement("select");
-          const cur = d.styles[prop];
-          const list = opts.includes(cur) ? opts : [cur, ...opts];
-          for (const o of list) { const op = document.createElement("option");
-            op.value = op.textContent = o; input.append(op); }
-          input.value = cur;
-          input.onchange = () => push(prop, input.value);
-        } else {
-          input = document.createElement("input"); input.type = "text";
-          input.value = d.styles[prop] || "";
-          input.onchange = () => push(prop, input.value);
-        }
-        row.append(lb, input); panelBody.append(row);
-      }
-    }
-  }
-
-  addEventListener("message", (e) => {
-    const m = e.data || {};
-    if (m.t === "sel") {
-      let file = null;
-      for (const [k, f] of frames) if (f.contentWindow === e.source) file = k;
-      if (!file) return;
-      sel = { file, path: m.path };
-      panel.classList.add("on"); document.body.classList.add("has-panel");
-      buildPanel(m);
-    } else if (m.t === "html") {
-      const r = pending.get(m.id); if (r) { pending.delete(m.id); r(m.html); }
-    }
-  });
-  document.getElementById("panel-close").onclick = closePanel;
-
-  // ---- notes ----------------------------------------------------------------
-  function wireNote(el, n) {
-    let d = null;
-    el.addEventListener("pointerdown", (e) => {
-      if (el.isContentEditable) return;
-      e.stopPropagation();
-      d = { x: e.clientX / view.k - (n.x || 0), y: e.clientY / view.k - (n.y || 0) };
-      el.setPointerCapture(e.pointerId);
+    f.style.pointerEvents = ["select","text","rect","ellipse"].includes(mode) ? "auto" : "none";
+    f.addEventListener("load", () => {
+      tellAgent(f, { t: "mode", on: ["select","text","rect","ellipse"].includes(mode) });
+      askTree(b.file);
     });
-    el.addEventListener("pointermove", (e) => {
-      if (!d) return;
-      n.x = Math.round(e.clientX / view.k - d.x); n.y = Math.round(e.clientY / view.k - d.y);
-      el.style.left = n.x + "px"; el.style.top = n.y + "px";
-    });
-    el.addEventListener("pointerup", () => { d = null; });
-    el.addEventListener("dblclick", (e) => {
-      e.stopPropagation();
-      el.contentEditable = "true"; el.focus();
-    });
-    el.addEventListener("blur", () => {
-      el.contentEditable = "false"; n.text = el.textContent;
-    });
+    frames.set(b.file, f); frame.append(f);
+    el.append(strip, frame);
+    strip.addEventListener("pointerdown", (ev) => { ev.stopPropagation(); selectBoard(b.file); });
+    world.append(el);
   }
-  function placeNote(e) {
-    const x = Math.round((e.clientX - view.x) / view.k), y = Math.round((e.clientY - view.y) / view.k);
-    let i = 1; while (notes.some(n => n.id === "note-" + i)) i++;
-    const n = { id: "note-" + i, x, y, w: 220, text: "New note",
-                ...(pages.length ? { page } : {}) };
-    notes.push(n); render(); setMode("note");
+  for (const n of notes) {
+    if (!onPage(n)) continue;
+    const el = document.createElement("div");
+    el.className = "note"; el.style.cssText =
+      `left:${n.x||0}px;top:${n.y||0}px;width:${n.w||240}px`;
+    el.textContent = n.text || ""; wireNote(el, n); world.append(el);
+  }
+  apply();
+}
+const apply = () => {
+  world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.k})`;
+  $("#zoom").textContent = Math.round(view.k * 100) + "%";
+};
+
+/* ---- layer tree ----------------------------------------------------------- */
+const pend = new Map(); let seq = 0;
+function askTree(file) {
+  const f = frames.get(file); if (!f) return;
+  const id = ++seq; pend.set(id, (t) => { trees.set(file, t); drawTree(); });
+  tellAgent(f, { t: "tree", id });
+}
+function row({ depth, name, right, kind, on, onClick, onToggle, hasKids, isOpen }) {
+  const r = document.createElement("div");
+  r.className = "tr" + (kind === "ab" ? " ab" : "") + (on ? " on" : "");
+  r.style.paddingLeft = (10 + depth * 14) + "px";
+  const cv = document.createElement("span"); cv.className = "cv";
+  if (hasKids) { cv.innerHTML = ICON.chev;
+    cv.firstChild.style.transform = isOpen ? "rotate(90deg)" : "";
+    cv.onclick = (e) => { e.stopPropagation(); onToggle(); }; }
+  const gl = document.createElement("span"); gl.className = "gl";
+  if (kind !== "ab") gl.innerHTML = name === "group" ? ICON.boxs : ICON.boxg;
+  const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = name;
+  const rt = document.createElement("span"); rt.className = "rt"; rt.textContent = right;
+  r.append(cv, gl, nm, rt);
+  r.onclick = onClick;
+  return r;
+}
+function drawTree() {
+  treeEl.textContent = "";
+  for (const b of boards) {
+    if (!onPage(b)) continue;
+    const t = trees.get(b.file);
+    const key = b.file;
+    const isOpen = open.has(key);
+    treeEl.append(row({
+      depth: 0, kind: "ab", name: b.title || b.file.replace(/\.html$/i, ""),
+      right: (b.w || 800) + " × " + (b.h || 600),
+      on: boardSel === b.file && !sel, hasKids: !!(t && t.kids.length), isOpen,
+      onToggle: () => { isOpen ? open.delete(key) : open.add(key); drawTree(); },
+      onClick: () => selectBoard(b.file),
+    }));
+    if (isOpen && t) walk(t.kids, b.file, 1);
+  }
+  if (!treeEl.children.length) {
+    const e = document.createElement("div");
+    e.style.cssText = "padding:16px;color:var(--dim)"; e.textContent = "No artboards on this page.";
+    treeEl.append(e);
+  }
+}
+function walk(kids, file, depth) {
+  for (const n of kids) {
+    const key = file + ":" + n.path.join(".");
+    const isOpen = open.has(key);
+    treeEl.append(row({
+      depth, name: n.name, right: n.tag, kind: "el",
+      on: sel && sel.file === file && sel.path.join(".") === n.path.join("."),
+      hasKids: n.kids.length > 0, isOpen,
+      onToggle: () => { isOpen ? open.delete(key) : open.add(key); drawTree(); },
+      onClick: () => { const f = frames.get(file);
+        if (f) { boardSel = file; tellAgent(f, { t: "pick", path: n.path }); } },
+    }));
+    if (isOpen) walk(n.kids, file, depth + 1);
+  }
+}
+function selectBoard(file) {
+  boardSel = file; sel = null; bcast({ t: "deselect" });
+  world.querySelectorAll(".board").forEach(n => n.classList.toggle("selected", n.dataset.file === file));
+  drawTree(); drawProps();
+}
+function deselect() { sel = null; boardSel = null; bcast({ t: "deselect" });
+  world.querySelectorAll(".board.selected").forEach(n => n.classList.remove("selected"));
+  drawTree(); drawProps(); }
+
+/* ---- properties ----------------------------------------------------------- */
+const px = (v) => (v || "").replace(/px$/, "");
+const hex = (c) => { const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/.exec(c || "");
+  return m ? "#" + [1,2,3].map(i => (+m[i]).toString(16).padStart(2, "0")).join("").toUpperCase() : "#000000"; };
+const put = (prop, v) => { if (!sel) return; const f = frames.get(sel.file);
+  if (f) tellAgent(f, { t: "style", path: sel.path, prop, value: v }); };
+
+function fld({ label, value, unit, prop, set, kind, opts }) {
+  const f = document.createElement("div");
+  f.className = "f" + (set ? " set" : "");
+  const lb = document.createElement("span"); lb.className = "lb";
+  lb.innerHTML = "<i></i>"; lb.append(label);
+  f.append(lb);
+  if (kind === "color") {
+    const t = document.createElement("input"); t.value = value; t.readOnly = true;
+    const sw = document.createElement("input"); sw.type = "color"; sw.className = "sw";
+    sw.value = value; sw.oninput = () => { t.value = sw.value.toUpperCase(); put(prop, sw.value); };
+    f.append(t, sw);
+  } else if (kind === "select") {
+    const s = document.createElement("select");
+    for (const o of (opts.includes(value) ? opts : [value, ...opts])) {
+      const op = document.createElement("option"); op.value = op.textContent = o; s.append(op); }
+    s.value = value; s.onchange = () => put(prop, s.value);
+    f.append(s);
+  } else {
+    const i = document.createElement("input"); i.value = value;
+    i.onchange = () => put(prop, unit ? i.value + (/\D$/.test(i.value) ? "" : unit) : i.value);
+    f.append(i);
+    if (unit) { const u = document.createElement("span"); u.className = "u"; u.textContent = unit; f.append(u); }
+  }
+  return f;
+}
+function seg(items, cur, cb, icons) {
+  const s = document.createElement("div"); s.className = "seg" + (icons ? " ic" : "");
+  for (const [val, lab] of items) {
+    const b = document.createElement("button");
+    if (icons) b.innerHTML = lab; else b.textContent = lab;
+    b.classList.toggle("on", val === cur);
+    b.onclick = () => cb(val);
+    s.append(b);
+  }
+  return s;
+}
+function section(title, reset) {
+  const d = document.createElement("div"); d.className = "sec";
+  const h = document.createElement("div"); h.className = "sh";
+  const b = document.createElement("b"); b.textContent = title;
+  h.append(b);
+  if (reset) { const r = document.createElement("span"); r.className = "rs"; r.textContent = "Reset";
+    r.onclick = reset; h.append(r); }
+  d.append(h); return d;
+}
+const grp = (...els) => { const g = document.createElement("div"); g.className = "g";
+  g.append(...els); return g; };
+function adders(list) { const a = document.createElement("div"); a.className = "add";
+  a.append("Add: ");
+  list.forEach((t, i) => { if (i) a.append(" · ");
+    const s = document.createElement("span"); s.textContent = t; a.append(s); });
+  return a; }
+
+function drawProps() {
+  propsEl.textContent = "";
+  if (!sel) {
+    const e = document.createElement("div"); e.className = "empty";
+    e.innerHTML = "<b>Nothing selected</b>Click any element in the design to edit it here.";
+    propsEl.append(e); return;
+  }
+  const st = sel.styles, inl = sel.inline || "";
+  const has = (p) => new RegExp(p.replace(/[A-Z]/g, c => "-" + c.toLowerCase())).test(inl);
+
+  if (sel.text !== null && sel.text !== undefined) {
+    const s = section("Content");
+    const ta = document.createElement("textarea"); ta.value = sel.text;
+    ta.oninput = () => { const f = frames.get(sel.file);
+      if (f) tellAgent(f, { t: "text", path: sel.path, value: ta.value }); };
+    s.append(ta); propsEl.append(s);
   }
 
-  // ---- pen ------------------------------------------------------------------
-  const ink = document.getElementById("ink");
-  const drawings = manifest.drawings = manifest.drawings || [];
-  function paintInk() {
-    ink.textContent = "";
-    for (const d of drawings) {
-      if (pages.length && (d.page || pages[0].id) !== page) continue;
-      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      path.setAttribute("d", d.d);
-      path.setAttribute("fill", "none");
-      path.setAttribute("stroke", d.stroke || "#b45309");
-      path.setAttribute("stroke-width", d.width || 3);
-      path.setAttribute("stroke-linecap", "round");
-      path.setAttribute("stroke-linejoin", "round");
-      ink.append(path);
+  const ap = section("Appearance", () => ["backgroundColor","borderRadius","opacity"].forEach(p => put(p, "")));
+  ap.append(grp(fld({ label: "Background", value: hex(st.backgroundColor), prop: "backgroundColor",
+    kind: "color", set: has("backgroundColor") })));
+  ap.append(grp(
+    fld({ label: "Radius", value: px(st.borderRadius), unit: "px", prop: "borderRadius", set: has("borderRadius") }),
+    fld({ label: "Overflow", value: st.overflow, prop: "overflow", kind: "select",
+      opts: ["visible","hidden","auto","scroll"], set: has("overflow") })));
+  ap.append(grp(fld({ label: "Opacity", value: st.opacity, prop: "opacity", set: has("opacity") })));
+  ap.append(adders(["shadow","text shadow","transform","filter"]));
+  propsEl.append(ap);
+
+  const tx = section("Text", () => ["color","fontSize","fontWeight","lineHeight","letterSpacing"].forEach(p => put(p, "")));
+  tx.append(grp(fld({ label: "Color", value: hex(st.color), prop: "color", kind: "color", set: has("color") })));
+  tx.append(grp(
+    fld({ label: "Size", value: px(st.fontSize), unit: "px", prop: "fontSize", set: has("fontSize") }),
+    fld({ label: "Weight", value: st.fontWeight, prop: "fontWeight", kind: "select",
+      opts: ["300","400","500","600","700","800"], set: has("fontWeight") })));
+  tx.append(grp(
+    fld({ label: "Line", value: px(st.lineHeight), unit: "px", prop: "lineHeight", set: has("lineHeight") }),
+    fld({ label: "Track", value: px(st.letterSpacing), unit: "px", prop: "letterSpacing", set: has("letterSpacing") })));
+  tx.append(seg([["left","Left"],["center","Center"],["right","Right"],["justify","Justify"]],
+    st.textAlign, (v) => put("textAlign", v)));
+  propsEl.append(tx);
+
+  const sz = section("Sizing", () => ["width","height"].forEach(p => put(p, "")));
+  for (const p of ["width", "height"]) {
+    const g = grp(fld({ label: p[0].toUpperCase() + p.slice(1), value: px(st[p]), unit: "px",
+      prop: p, set: has(p) }));
+    g.append(seg([["auto","Hug"],["fixed","Fixed"],["100%","Fill"]],
+      has(p) ? (st[p] === "auto" ? "auto" : "fixed") : "auto",
+      (v) => put(p, v === "fixed" ? st[p] : v)));
+    sz.append(g);
+  }
+  sz.append(adders(["min width","max width","min height","max height"]));
+  propsEl.append(sz);
+
+  const po = section("Position");
+  po.append(seg([["static","Inline"],["absolute","Absolute"]], st.position === "static" ? "static" : "absolute",
+    (v) => put("position", v)));
+  po.append(grp(
+    fld({ label: "Top", value: px(st.top), unit: "px", prop: "top", set: has("top") }),
+    fld({ label: "Left", value: px(st.left), unit: "px", prop: "left", set: has("left") })));
+  po.append(grp(fld({ label: "Z-index", value: st.zIndex, prop: "zIndex", set: has("zIndex") })));
+  po.append(seg([["absolute","Absolute"],["fixed","Fixed"],["sticky","Sticky"]], st.position,
+    (v) => put("position", v)));
+  propsEl.append(po);
+
+  const la = section("Contents layout");
+  la.append(grp(fld({ label: "Display", value: st.display, prop: "display", kind: "select",
+    opts: ["block","flex","grid","inline-block","inline-flex","none"], set: has("display") })));
+  const AR = { row: "→", column: "↓", "row-reverse": "←", "column-reverse": "↑" };
+  const dg = document.createElement("div"); dg.className = "g";
+  const dl = document.createElement("div"); dl.className = "f";
+  dl.append(Object.assign(document.createElement("span"), { className: "lb", textContent: "Direction" }));
+  dl.append(seg(Object.entries(AR), st.flexDirection, (v) => put("flexDirection", v), true));
+  dg.append(dl);
+  dg.append(fld({ label: "Wrap", value: st.flexWrap, prop: "flexWrap", kind: "select",
+    opts: ["nowrap","wrap","wrap-reverse"], set: has("flexWrap") }));
+  la.append(dg);
+  la.append(seg([["flex-start","Start"],["center","Center"],["flex-end","End"],
+    ["space-between","Between"],["space-around","Around"]], st.justifyContent,
+    (v) => put("justifyContent", v)));
+  la.append(seg([["stretch","Stretch"],["flex-start","Start"],["center","Center"],["flex-end","End"]],
+    st.alignItems, (v) => put("alignItems", v)));
+  la.append(grp(fld({ label: "Gap", value: px(st.gap), unit: "px", prop: "gap", set: has("gap") })));
+  propsEl.append(la);
+}
+
+/* ---- messages ------------------------------------------------------------- */
+addEventListener("message", (e) => {
+  const m = e.data || {};
+  let file = null;
+  for (const [k, f] of frames) if (f.contentWindow === e.source) file = k;
+  if (m.t === "sel" && file) {
+    sel = { file, path: m.path, styles: m.styles, inline: m.inline, text: m.text, tag: m.tag };
+    boardSel = file;
+    world.querySelectorAll(".board").forEach(n => n.classList.remove("selected"));
+    for (const p of m.path.slice(0, 0)) {}
+    let key = file; open.add(key);
+    for (let i = 1; i <= m.path.length; i++) open.add(file + ":" + m.path.slice(0, i).join("."));
+    drawTree(); drawProps();
+  } else if (m.t === "tree" || m.t === "html") {
+    const r = pend.get(m.id); if (r) { pend.delete(m.id); r(m.tree !== undefined ? m.tree : m.html); }
+  }
+});
+
+/* ---- pan / zoom ----------------------------------------------------------- */
+let drag = null, stroke = null;
+const wpt = (e) => [Math.round((e.clientX - view.x) / view.k), Math.round((e.clientY - view.y) / view.k)];
+viewport.addEventListener("pointerdown", (e) => {
+  if (mode === "pen" || mode === "arrow") { const [x, y] = wpt(e);
+    stroke = { d: `M${x} ${y}`, x0: x, y0: y, arrow: mode === "arrow", ...(pages.length ? { page } : {}) };
+    drawings.push(stroke); viewport.setPointerCapture(e.pointerId); paintInk(); return; }
+  if (mode === "note" && !e.target.closest(".note")) { placeNote(e); return; }
+  if (e.target.closest(".board") || e.target.closest(".note")) return;
+  deselect();
+  touched = true; drag = { x: e.clientX - view.x, y: e.clientY - view.y };
+  viewport.classList.add("panning"); viewport.setPointerCapture(e.pointerId);
+});
+viewport.addEventListener("pointermove", (e) => {
+  if (stroke) { const [x, y] = wpt(e);
+    if (stroke.arrow) { stroke.x1 = x; stroke.y1 = y; } else stroke.d += ` L${x} ${y}`;
+    paintInk(); return; }
+  if (!drag) return;
+  view.x = e.clientX - drag.x; view.y = e.clientY - drag.y; apply();
+});
+const endDrag = () => { drag = null; stroke = null; viewport.classList.remove("panning"); };
+viewport.addEventListener("pointerup", endDrag);
+viewport.addEventListener("pointercancel", endDrag);
+viewport.addEventListener("wheel", (e) => {
+  e.preventDefault(); touched = true;
+  const k = Math.min(4, Math.max(.05, view.k * Math.exp(-e.deltaY * ((e.ctrlKey || e.metaKey) ? .01 : .0025))));
+  view.x = e.clientX - (e.clientX - view.x) * (k / view.k);
+  view.y = e.clientY - (e.clientY - view.y) * (k / view.k);
+  view.k = k; apply();
+}, { passive: false });
+
+function bounds() {
+  const it = [...boards.filter(onPage).map(b => ({ x: b.x||0, y: (b.y||0)-26, w: b.w||800, h: (b.h||600)+26 })),
+              ...notes.filter(onPage).map(n => ({ x: n.x||0, y: n.y||0, w: n.w||240, h: 100 }))];
+  if (!it.length) return null;
+  return it.reduce((a, i) => ({ x1: Math.min(a.x1, i.x), y1: Math.min(a.y1, i.y),
+    x2: Math.max(a.x2, i.x+i.w), y2: Math.max(a.y2, i.y+i.h) }),
+    { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity });
+}
+function fit() {
+  const b = bounds(); if (!b) return;
+  const pad = 60, W = viewport.clientWidth - pad*2, H = viewport.clientHeight - pad*2 - 50;
+  view.k = Math.min(2, Math.max(.05, Math.min(W/(b.x2-b.x1), H/(b.y2-b.y1))));
+  view.x = pad + (W - (b.x2-b.x1)*view.k)/2 - b.x1*view.k;
+  view.y = pad + (H - (b.y2-b.y1)*view.k)/2 - b.y1*view.k;
+  apply();
+}
+let rt = null;
+addEventListener("resize", () => { if (touched) return; clearTimeout(rt); rt = setTimeout(fit, 120); });
+
+/* ---- ink ------------------------------------------------------------------ */
+function paintInk() {
+  ink.textContent = "";
+  for (const d of drawings) {
+    if (pages.length && (d.page || pages[0].id) !== page) continue;
+    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    let dd = d.d;
+    if (d.arrow && d.x1 !== undefined) {
+      const a = Math.atan2(d.y1 - d.y0, d.x1 - d.x0), L = 14;
+      dd = `M${d.x0} ${d.y0} L${d.x1} ${d.y1}` +
+        ` M${d.x1} ${d.y1} L${d.x1 - L*Math.cos(a - .4)} ${d.y1 - L*Math.sin(a - .4)}` +
+        ` M${d.x1} ${d.y1} L${d.x1 - L*Math.cos(a + .4)} ${d.y1 - L*Math.sin(a + .4)}`;
     }
+    p.setAttribute("d", dd); p.setAttribute("fill", "none");
+    p.setAttribute("stroke", d.stroke || "#e0568c"); p.setAttribute("stroke-width", d.width || 3);
+    p.setAttribute("stroke-linecap", "round"); p.setAttribute("stroke-linejoin", "round");
+    ink.append(p);
   }
-  let stroke = null;
-  const wpt = (e) => [Math.round((e.clientX - view.x) / view.k), Math.round((e.clientY - view.y) / view.k)];
-  function penDown(e) {
-    const [x, y] = wpt(e);
-    stroke = { d: `M${x} ${y}`, stroke: "#b45309", width: 3, ...(pages.length ? { page } : {}) };
-    drawings.push(stroke); viewport.setPointerCapture(e.pointerId); paintInk();
-  }
-  viewport.addEventListener("pointermove", (e) => {
-    if (!stroke) return;
-    const [x, y] = wpt(e); stroke.d += ` L${x} ${y}`; paintInk();
-  });
-  viewport.addEventListener("pointerup", () => { stroke = null; });
-  document.getElementById("erase").onclick = () => {
-    const keep = drawings.filter(d => pages.length && (d.page || pages[0].id) !== page);
-    drawings.length = 0; drawings.push(...keep); paintInk();
-  };
+}
 
-  // ---- save -----------------------------------------------------------------
-  const pending = new Map();
-  let seq = 0;
-  const askHtml = (f) => new Promise((res) => {
-    const id = ++seq; pending.set(id, res);
-    tellAgent(f, { t: "serialize", id });
-    setTimeout(() => { if (pending.has(id)) { pending.delete(id); res(null); } }, 3000);
+/* ---- notes / artboards ---------------------------------------------------- */
+function wireNote(el, n) {
+  let d = null;
+  el.addEventListener("pointerdown", (e) => {
+    if (el.isContentEditable) return;
+    e.stopPropagation();
+    d = { x: e.clientX/view.k - (n.x||0), y: e.clientY/view.k - (n.y||0) };
+    el.setPointerCapture(e.pointerId);
   });
-
-  async function save() {
-    const btn = document.getElementById("save");
-    const was = btn.textContent; btn.textContent = "Saving…"; btn.disabled = true;
-    try {
-      for (const [file, f] of frames) {
-        const html = await askHtml(f);
-        if (html) files[file] = html;
-      }
-      manifest.notes = notes; manifest.drawings = drawings;
-      const state = JSON.stringify({ title: DOC.title, files, canvas: manifest })
-        .replace(/<\/script/gi, "<\\/script").replace(/<!\x2D\x2D/g, "<\\!--");
-      const clone = document.documentElement.cloneNode(true);
-      clone.querySelector("#world").textContent = "";
-      clone.querySelector("#print-out").textContent = "";
-      clone.querySelectorAll("#focus iframe").forEach(n => n.remove());
-      clone.querySelector("#panel").classList.remove("on");
-      clone.querySelector("#canvas-doc").textContent = state;
-      const blob = new Blob(["<!doctype html>\n" + clone.outerHTML], { type: "text/html" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = (DOC.title || "canvas").toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".html";
-      a.click(); URL.revokeObjectURL(a.href);
-      btn.textContent = "Saved";
-      setTimeout(() => { btn.textContent = was; btn.disabled = false; }, 1200);
-    } catch (err) {
-      btn.textContent = "Failed"; console.error(err);
-      setTimeout(() => { btn.textContent = was; btn.disabled = false; }, 1600);
-    }
-  }
-  document.getElementById("save").onclick = save;
-  for (const id of Object.keys(MODES)) document.getElementById(id).onclick = () => setMode(id);
-  addEventListener("keydown", (e) => {
-    if (e.target.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
-    const k = e.key.toLowerCase();
-    if (k === "v") setMode("pick"); else if (k === "n") setMode("note");
-    else if (k === "d") setMode("pen");
-  });
-
-  // ---- boot -----------------------------------------------------------------
-  const launch = manifest.launch || { view: "canvas" };
-  page = (pages.length ? (launch.page || pages[0].id) : null);
-  if (pages.length) pagesSel.value = page;
+  el.addEventListener("pointermove", (e) => { if (!d) return;
+    n.x = Math.round(e.clientX/view.k - d.x); n.y = Math.round(e.clientY/view.k - d.y);
+    el.style.left = n.x + "px"; el.style.top = n.y + "px"; });
+  el.addEventListener("pointerup", () => { d = null; });
+  el.addEventListener("dblclick", (e) => { e.stopPropagation();
+    el.contentEditable = "true"; el.focus(); });
+  el.addEventListener("blur", () => { el.contentEditable = "false"; n.text = el.textContent; });
+}
+function placeNote(e) {
+  const [x, y] = wpt(e);
+  let i = 1; while (notes.some(n => n.id === "note-" + i)) i++;
+  notes.push({ id: "note-" + i, x, y, w: 240, text: "New note", ...(pages.length ? { page } : {}) });
   render();
-  paintInk();
-  if (launch.view === "focused" && files[launch.file]) {
-    focusOn(boards.find(b => b.file === launch.file) || { file: launch.file });
+}
+function addArtboard() {
+  const b = bounds();
+  let i = 1; while (files["Artboard" + i + ".html"]) i++;
+  const name = "Artboard" + i + ".html";
+  files[name] = '<!doct' + 'ype html><meta charset="utf-8">' +
+    '<style>body{margin:0;background:#fff;font-family:system-ui,sans-serif}</style>' +
+    '<div style="padding:32px"></div>';
+  boards.push({ file: name, x: b ? b.x2 + 80 : 0, y: b ? b.y1 + 26 : 0, w: 800, h: 600,
+    ...(pages.length ? { page } : {}) });
+  render(); setMode("select");
+}
+function dl(file) {
+  const blob = new Blob([files[file]], { type: "text/html" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = file; a.click(); URL.revokeObjectURL(a.href);
+}
+
+/* ---- focus / print / save ------------------------------------------------- */
+const focusEl = $("#focus");
+function focusOn(b) {
+  focusEl.querySelectorAll("iframe").forEach(n => n.remove());
+  const f = document.createElement("iframe");
+  f.setAttribute("sandbox", "allow-scripts"); f.srcdoc = resolve(files[b.file], false);
+  focusEl.append(f); focusEl.classList.add("on");
+}
+$("#focus-close").onclick = () => focusEl.classList.remove("on");
+$("#print").onclick = () => {
+  const o = $("#print-out"); o.textContent = "";
+  for (const b of boards) {
+    if (!onPage(b) || files[b.file] === undefined) continue;
+    const w = document.createElement("div"); w.className = "p";
+    const f = document.createElement("iframe");
+    f.setAttribute("sandbox", "allow-scripts");
+    f.width = b.w || 800; f.height = b.h || 600; f.srcdoc = resolve(files[b.file], false);
+    w.append(f); o.append(w);
   }
-  fit();
+  setTimeout(() => print(), 500);
+};
+const askHtml = (f) => new Promise((res) => {
+  const id = ++seq; pend.set(id, res); tellAgent(f, { t: "serialize", id });
+  setTimeout(() => { if (pend.has(id)) { pend.delete(id); res(null); } }, 3000);
+});
+async function save() {
+  const btn = $("#t-save"), was = btn.textContent;
+  btn.textContent = "Saving…"; btn.disabled = true;
+  try {
+    for (const [file, f] of frames) { const h = await askHtml(f); if (h) files[file] = h; }
+    const state = JSON.stringify({ title: DOC.title, files, canvas: manifest })
+      .replace(/<\/script/gi, "<\\/script").replace(/<!\x2D\x2D/g, "<\\!--");
+    const c = document.documentElement.cloneNode(true);
+    c.querySelector("#world").innerHTML = '<svg id="ink"></svg>';
+    c.querySelector("#print-out").textContent = "";
+    c.querySelectorAll("#focus iframe").forEach(n => n.remove());
+    c.querySelector("#tools").textContent = "";
+    c.querySelector("#tree").textContent = "";
+    c.querySelector("#props").textContent = "";
+    c.querySelector("#canvas-doc").textContent = state;
+    const blob = new Blob(["<!doct" + "ype html>\n" + c.outerHTML], { type: "text/html" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = (DOC.title || "canvas").toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".html";
+    a.click(); URL.revokeObjectURL(a.href);
+    btn.textContent = "Saved";
+  } catch (err) { btn.textContent = "Failed"; console.error(err); }
+  setTimeout(() => { btn.textContent = was; btn.disabled = false; }, 1300);
+}
+$("#t-save").onclick = save;
+$("#t-toggle").innerHTML = ICON.side;
+$("#t-toggle").onclick = () => document.body.classList.toggle("no-side");
+$("#tabs").onclick = (e) => { const b = e.target.closest("button"); if (!b) return;
+  $("#tabs").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+  const t = b.dataset.tab;
+  treeEl.style.display = t === "edit" ? "" : "none";
+  toolsEl.style.display = t === "edit" ? "" : "none";
+  if (t === "edit") drawProps();
+  else { propsEl.textContent = "";
+    const e2 = document.createElement("div"); e2.className = "empty";
+    e2.innerHTML = t === "code"
+      ? "<b>Code</b>Not in this build. Save the canvas and edit the artboard files."
+      : "<b>Tweaks</b>Not in this build.";
+    propsEl.append(e2); }
+};
+$("#zoom-in").onclick = () => { touched = true; view.k = Math.min(4, view.k*1.25); apply(); };
+$("#zoom-out").onclick = () => { touched = true; view.k = Math.max(.05, view.k/1.25); apply(); };
+$("#fit").onclick = () => { touched = false; fit(); };
+
+/* ---- pages / boot --------------------------------------------------------- */
+const pagesSel = $("#pages");
+if (pages.length) {
+  for (const p of pages) { const o = document.createElement("option");
+    o.value = p.id; o.textContent = p.name; pagesSel.append(o); }
+  pagesSel.hidden = false; $("#pages-sep").hidden = false;
+  pagesSel.onchange = () => { page = pagesSel.value; touched = false;
+    render(); paintInk(); drawTree(); fit(); };
+}
+const launch = manifest.launch || { view: "canvas" };
+page = pages.length ? (launch.page || pages[0].id) : null;
+if (pages.length) pagesSel.value = page;
+setMode("select");
+render(); paintInk(); drawTree(); drawProps();
+if (launch.view === "focused" && files[launch.file])
+  focusOn(boards.find(b => b.file === launch.file) || { file: launch.file });
+fit();
 })();
 </script>
 </body>

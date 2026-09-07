@@ -131,9 +131,21 @@ Two that override everything else:
 
 ## Editing on the canvas
 
-The canvas has modes, on the toolbar and on keys: **Select** (V) picks elements inside an artboard
-and opens the properties panel; **Note** (N) drops a sticky note; **Draw** (D) is freehand ink.
-With no mode active, dragging pans.
+The canvas is a right-hand sidebar over a dark stage: **Edit / Code / Tweaks** tabs, a row of eight
+tools, a layer tree, and property sections.
+
+Tools, with their keys: **Select** (V), **Text** (T), **Artboard** (F), **Note** (N),
+**Rectangle** (R), **Ellipse** (O), **Arrow** (A), **Draw** (D). Select, Text, Rectangle and
+Ellipse act inside an artboard; the rest act on the canvas. Dragging empty canvas pans.
+
+The layer tree names containers the way a design tool does - **Row**, **Column**, **Grid**,
+**group** - from their computed display and flex direction, and shows a text leaf by its own text.
+Artboard rows carry their pixel size, element rows their tag. Selecting in the tree selects in the
+artboard, and vice versa.
+
+Properties come in sections - Content, Appearance, Text, Sizing, Position, Contents layout - each
+with a Reset. A blue dot on a field means the value is set inline on that element rather than
+inherited.
 
 Selection works by an agent injected into each artboard's iframe - the host cannot reach across the
 opaque origin, so every edit travels by postMessage. The panel edits inline styles (text, box,
