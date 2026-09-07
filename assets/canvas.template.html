@@ -96,6 +96,9 @@
   #tools button:active{transform:scale(.94)}
   #tools button.on{background:var(--field2);color:#fff;box-shadow:inset 0 0 0 1px var(--line)}
 
+  #hint{padding:0 12px 9px;color:var(--dim);font-size:12px;border-bottom:1px solid var(--line2);
+    margin-top:-4px}
+  #hint b{color:var(--muted);font-weight:500}
   #tree{max-height:230px;min-height:120px;overflow:auto;padding:8px 0;
     border-bottom:1px solid var(--line2);resize:vertical}
   .tr{display:flex;align-items:center;gap:6px;padding:3px 14px 3px 0;cursor:default;
@@ -140,6 +143,11 @@
   #props .empty{padding:60px 24px;text-align:center;color:var(--dim);line-height:1.7}
   #props .empty b{display:block;color:var(--muted);font-weight:400;font-size:14px;
     margin-bottom:4px}
+  #props .btn{padding:6px 14px;border-radius:7px;background:var(--field2);color:var(--ink);
+    border:1px solid var(--line);transition:background var(--t-hover) var(--ease),
+      transform var(--t-tap) var(--ease-out)}
+  #props .btn:active{transform:scale(.97)}
+  #props .btn.ghost{background:transparent;color:var(--muted)}
   #props textarea{width:100%;background:var(--field);border:1px solid var(--line);
     border-radius:8px;padding:8px 10px;color:var(--ink);font:inherit;resize:vertical;
     min-height:66px}
@@ -201,6 +209,7 @@
       <button data-tab="tweaks">Tweaks</button>
     </div>
     <div id="tools"></div>
+    <div id="hint"></div>
     <div id="tree"></div>
     <div id="props"></div>
   </aside>
@@ -238,17 +247,42 @@ const HB='position:absolute;pointer-events:none;z-index:2147483647;box-sizing:bo
 const FADE='opacity:0;transition:opacity 120ms cubic-bezier(.4,0,.2,1);';
 box.style.cssText=HB+FADE+'border:1.5px solid '+PINK+';';
 hov.style.cssText=HB+FADE+'border:1.5px dashed '+PINK+';';
+let rz=null;const HS=[];
 for(const c of ['nw','ne','sw','se']){const h=document.createElement('div');
-  h.style.cssText='position:absolute;width:7px;height:7px;background:#fff;box-sizing:border-box;'
-    +'border:1.5px solid '+PINK+';'
-    +(c[0]==='n'?'top:-4px;':'bottom:-4px;')+(c[1]==='w'?'left:-4px;':'right:-4px;');
-  box.append(h);}
+  h.dataset.c=c;
+  h.style.cssText='position:absolute;width:9px;height:9px;background:#fff;box-sizing:border-box;'
+    +'border:1.5px solid '+PINK+';pointer-events:auto;touch-action:none;'
+    +'cursor:'+(c==='nw'||c==='se'?'nwse':'nesw')+'-resize;'
+    +(c[0]==='n'?'top:-5px;':'bottom:-5px;')+(c[1]==='w'?'left:-5px;':'right:-5px;');
+  h.addEventListener('pointerdown',(e)=>{if(!cur)return;e.preventDefault();e.stopPropagation();
+    const r=cur.getBoundingClientRect();
+    rz={c:c,x:e.clientX,y:e.clientY,w:r.width,h:r.height,
+        pw:cur.style.width,ph:cur.style.height};
+    h.setPointerCapture(e.pointerId);});
+  h.addEventListener('pointermove',(e)=>{if(!rz||!cur)return;
+    const dx=(rz.c[1]==='w'?-1:1)*(e.clientX-rz.x), dy=(rz.c[0]==='n'?-1:1)*(e.clientY-rz.y);
+    cur.style.width=Math.max(1,Math.round(rz.w+dx))+'px';
+    cur.style.height=Math.max(1,Math.round(rz.h+dy))+'px';
+    place(box,cur,3);});
+  h.addEventListener('pointerup',()=>{if(!rz||!cur)return;
+    parent.postMessage({t:'resized',path:P(cur),
+      pw:rz.pw,ph:rz.ph,w:cur.style.width,h:cur.style.height},'*');
+    parent.postMessage({t:'sel',...info(cur)},'*');rz=null;});
+  HS.push(h);box.append(h);}
 box.dataset.dcUi='1';hov.dataset.dcUi='1';
-const mount=()=>document.body&&document.body.append(box,hov);
+const gh=document.createElement('div');gh.dataset.dcUi='1';
+gh.style.cssText=HB+'opacity:0;transition:opacity 90ms linear;border:1.5px dashed '+PINK+';'
+  +'background:rgba(224,86,140,.10);display:grid;place-items:center;color:'+PINK
+  +';font:12px/1 ui-sans-serif,system-ui;letter-spacing:.02em';
+const SHAPE={text:{w:90,h:24,r:'3px',t:'Text'},rect:{w:160,h:90,r:'8px',t:''},
+  ellipse:{w:120,h:120,r:'50%',t:''}};
+const mount=()=>document.body&&document.body.append(box,hov,gh);
 if(document.body)mount();else addEventListener('DOMContentLoaded',mount);
-const place=(n,el,p)=>{if(!el){n.style.opacity='0';return;}p=p||0;
+const grip=(on)=>{for(const h of HS)h.style.pointerEvents=on?'auto':'none';};
+grip(false);
+const place=(n,el,p)=>{if(!el){n.style.opacity='0';if(n===box)grip(false);return;}p=p||0;
   const r=el.getBoundingClientRect(),br=parseFloat(getComputedStyle(el).borderTopLeftRadius)||0;
-  n.style.opacity='1';
+  n.style.opacity='1';if(n===box)grip(true);
   n.style.left=(r.left+scrollX-p)+'px';n.style.top=(r.top+scrollY-p)+'px';
   n.style.width=(r.width+p*2)+'px';n.style.height=(r.height+p*2)+'px';
   n.style.borderRadius=(br?br+p:4)+'px';};
@@ -270,7 +304,8 @@ const info=(el)=>{const c=getComputedStyle(el),o={};
   return{tag:el.tagName.toLowerCase(),name:nameOf(el),path:P(el),styles:o,
     inline:el.getAttribute('style')||'',text:el.children.length===0?el.textContent:null};};
 addEventListener('message',(e)=>{const m=e.data||{};
-  if(m.t==='mode'){on=!!m.on;if(!on){box.style.opacity='0';hov.style.opacity='0';}}
+  if(m.t==='mode'){on=!!m.on;if(!on){box.style.opacity='0';grip(false);hov.style.opacity='0';
+    gh.style.opacity='0';}}
   else if(m.t==='tree'){parent.postMessage({t:'tree',id:m.id,tree:document.body?tree(document.body,0):null},'*');}
   else if(m.t==='pick'){const el=E(m.path);if(el){cur=el;place(box,el,3);parent.postMessage({t:'sel',...info(el)},'*');}}
   else if(m.t==='style'){const el=E(m.path);if(el){const pv=el.style[m.prop];
@@ -281,13 +316,37 @@ addEventListener('message',(e)=>{const m=e.data||{};
   else if(m.t==='serialize'){const c=document.documentElement.cloneNode(true);
     c.querySelectorAll('[data-dc-agent],[data-dc-ui]').forEach(n=>n.remove());
     parent.postMessage({t:'html',id:m.id,html:'<!doct'+'ype html>\\n'+c.outerHTML},'*');}
-  else if(m.t==='tool'){tool=m.name;}
-  else if(m.t==='deselect'){box.style.opacity='0';cur=null;}});
-addEventListener('mouseover',(e)=>{if(on&&e.target!==cur)place(hov,e.target,2);},true);
+  else if(m.t==='tool'){tool=m.name;
+    const sp=SHAPE[tool];
+    if(sp){gh.style.width=sp.w+'px';gh.style.height=sp.h+'px';gh.style.borderRadius=sp.r;
+      gh.textContent=sp.t;}
+    else{gh.style.opacity='0';}}
+  else if(m.t==='src'){const c=document.documentElement.cloneNode(true);
+    c.querySelectorAll('[data-dc-agent],[data-dc-ui]').forEach(n=>n.remove());
+    parent.postMessage({t:'src',id:m.id,html:'<!doct'+'ype html>\\n'+c.outerHTML},'*');}
+  else if(m.t==='vars'){const seen={},re=/(--[\\w-]+)\\s*:\\s*([^;}]+)/g;
+    for(const sh of document.styleSheets){let rl;try{rl=sh.cssRules}catch(err){continue}
+      for(const r of rl||[]){if(!r.selectorText||!r.style)continue;
+        if(!/^(:root|html|body)$/.test(r.selectorText.trim()))continue;
+        for(let i=0;i<r.style.length;i++){const n=r.style[i];
+          if(n.indexOf('--')===0)seen[n]=r.style.getPropertyValue(n).trim();}}}
+    const inl=document.documentElement.getAttribute('style')||'';let mm;
+    while((mm=re.exec(inl)))seen[mm[1]]=mm[2].trim();
+    parent.postMessage({t:'vars',id:m.id,vars:seen},'*');}
+  else if(m.t==='setvar'){document.documentElement.style.setProperty(m.name,m.value);
+    parent.postMessage({t:'varset',name:m.name,value:m.value},'*');}
+  else if(m.t==='deselect'){box.style.opacity='0';grip(false);cur=null;}});
+addEventListener('mousemove',(e)=>{if(!on||!SHAPE[tool]){gh.style.opacity='0';return;}
+  const sp=SHAPE[tool];
+  gh.style.left=(e.clientX+scrollX-sp.w/2)+'px';gh.style.top=(e.clientY+scrollY-sp.h/2)+'px';
+  gh.style.opacity='1';},true);
+addEventListener('mouseleave',()=>{gh.style.opacity='0';},true);
+addEventListener('mouseover',(e)=>{if(on&&!SHAPE[tool]&&e.target!==cur)place(hov,e.target,2);
+  else hov.style.opacity='0';},true);
 addEventListener('mouseout',()=>{hov.style.opacity='0';},true);
 addEventListener('click',(e)=>{if(!on)return;e.preventDefault();e.stopPropagation();
   let t=e.target;
-  if(tool){const n=document.createElement('div');
+  if(SHAPE[tool]){gh.style.opacity='0';const n=document.createElement('div');
     if(tool==='text'){n.textContent='Text';n.setAttribute('style','font-size:16px;color:#111');}
     else if(tool==='rect'){n.setAttribute('style','width:160px;height:90px;background:#d9d4cc;border-radius:8px');}
     else if(tool==='ellipse'){n.setAttribute('style','width:120px;height:120px;background:#d9d4cc;border-radius:50%');}
@@ -356,11 +415,23 @@ for (const [id, label, key] of TOOLS) {
   b.onclick = () => setMode(id);
   toolsEl.append(b);
 }
+const HINT = {
+  select: "Click an element in an artboard to edit it",
+  text: "Click inside an artboard to drop a text layer",
+  frame: "Adds a new empty artboard to the canvas",
+  note: "Click the canvas to place a sticky note",
+  rect: "Click inside an artboard to drop a rectangle",
+  ellipse: "Click inside an artboard to drop an ellipse",
+  arrow: "Drag on the canvas to draw an arrow",
+  pen: "Drag on the canvas to draw freehand",
+};
 function setMode(m) {
   mode = m;
   toolsEl.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.tool === m));
   viewport.classList.toggle("pen", m === "pen" || m === "arrow");
   viewport.classList.toggle("noting", m === "note");
+  const lbl = (TOOLS.find(t => t[0] === m) || [])[1] || "";
+  $("#hint").innerHTML = "<b>" + lbl + "</b> &middot; " + (HINT[m] || "");
   const inFrame = ["select","text","rect","ellipse"].includes(m);
   for (const f of frames.values()) {
     f.style.pointerEvents = inFrame ? "auto" : "none";
@@ -516,21 +587,44 @@ function record(e) {
   hist.length = hpos; hist.push(e); hpos = hist.length;
   if (hist.length > 200) { hist.shift(); hpos--; }
 }
+const snap = () => JSON.stringify({ n: notes, d: drawings, b: boards });
+let base = null;
+function mark() { base = snap(); }
+function commitCanvas(label) {
+  const after = snap(); if (after === base) return;
+  record({ kind: "canvas", label, prev: base, next: after }); base = after;
+}
+function applyCanvas(json) {
+  const o = JSON.parse(json);
+  notes.length = 0; notes.push(...o.n);
+  drawings.length = 0; drawings.push(...o.d);
+  boards.length = 0; boards.push(...o.b);
+  manifest.notes = notes; manifest.drawings = drawings; manifest.artboards = boards;
+  render(); paintInk(); drawTree();
+}
 function step(back) {
   const e = back ? hist[hpos - 1] : hist[hpos];
   if (!e) return;
-  const f = frames.get(e.file); if (!f) return;
+  const f = e.file ? frames.get(e.file) : null;
+  if (e.file && !f) return;
   replaying = true;
   const v = back ? e.prev : e.next;
-  tellAgent(f, e.kind === "text" ? { t: "text", path: e.path, value: v }
-                                 : { t: "style", path: e.path, prop: e.prop, value: v });
+  if (e.kind === "canvas") { applyCanvas(v); base = v; }
+  else if (e.kind === "src") { files[e.file] = v; _rcache.clear(); render(); askTree(e.file);
+    if (tab === "code") setTimeout(drawCode, 60); }
+  else if (e.kind === "text") tellAgent(f, { t: "text", path: e.path, value: v });
+  else if (e.kind === "size") {
+    tellAgent(f, { t: "style", path: e.path, prop: "width", value: back ? e.pw : e.w });
+    tellAgent(f, { t: "style", path: e.path, prop: "height", value: back ? e.ph : e.h });
+  } else tellAgent(f, { t: "style", path: e.path, prop: e.prop, value: v });
   hpos += back ? -1 : 1;
-  setTimeout(() => { replaying = false; }, 60);
+  setTimeout(() => { replaying = false; }, 80);
 }
 const put = (prop, v) => { if (!sel) return; const f = frames.get(sel.file);
   if (f) tellAgent(f, { t: "style", path: sel.path, prop, value: v }); };
 
-function fld({ label, value, unit, prop, set, kind, opts, min, max, step }) {
+function fld({ label, value, unit, prop, set, kind, opts, min, max, step, onSet }) {
+  const sink = onSet || ((v) => put(prop, v));
   const f = document.createElement("div");
   f.className = "f" + (set ? " set" : "");
   const lb = document.createElement("span"); lb.className = "lb";
@@ -538,15 +632,22 @@ function fld({ label, value, unit, prop, set, kind, opts, min, max, step }) {
   f.append(lb);
   if (kind === "color") {
     const t = document.createElement("input"); t.value = value; t.readOnly = true;
+    if (prop && !onSet) { t.dataset.hex = "1"; bound.set(prop, t); }
     const sw = document.createElement("input"); sw.type = "color"; sw.className = "sw";
-    sw.value = value; sw.oninput = () => { t.value = sw.value.toUpperCase(); put(prop, sw.value); };
+    sw.value = /^#[0-9a-f]{6}$/i.test(value) ? value : "#000000";
+    sw.oninput = () => { t.value = sw.value.toUpperCase(); sink(sw.value); };
     f.append(t, sw);
   } else if (kind === "select") {
     const s = document.createElement("select");
     for (const o of (opts.includes(value) ? opts : [value, ...opts])) {
       const op = document.createElement("option"); op.value = op.textContent = o; s.append(op); }
-    s.value = value; s.onchange = () => put(prop, s.value);
+    s.value = value; s.onchange = () => sink(s.value);
     f.append(s);
+  } else if (kind === "text") {
+    const i = document.createElement("input");
+    i.value = value; i.spellcheck = false;
+    i.onchange = () => sink(i.value);
+    f.append(i);
   } else {
     const i = document.createElement("input");
     const kw = opts || [];
@@ -554,13 +655,14 @@ function fld({ label, value, unit, prop, set, kind, opts, min, max, step }) {
     const hi = max === undefined ? Infinity : max;
     const dec = step && step < 1;
     i.value = value; i.spellcheck = false;
+    if (prop && !onSet) { if (unit === "px") i.dataset.px = "1"; bound.set(prop, i); }
     i.setAttribute("inputmode", dec ? "decimal" : "numeric");
     i.setAttribute("autocomplete", "off");
     let last = value;
 
     const commit = (raw, silent) => {
       const t = String(raw).trim();
-      if (kw.includes(t)) { last = t; i.value = t; if (!silent) put(prop, t); return true; }
+      if (kw.includes(t)) { last = t; i.value = t; if (!silent) sink(t); return true; }
       if (t === "") { i.value = last; return false; }
       const n = parseFloat(t.replace(",", "."));
       if (!isFinite(n)) { i.value = last; i.classList.add("bad");
@@ -568,7 +670,7 @@ function fld({ label, value, unit, prop, set, kind, opts, min, max, step }) {
       const c = Math.min(hi, Math.max(lo, n));
       const out = dec ? Math.round(c * 100) / 100 : Math.round(c * 1000) / 1000;
       last = String(out); i.value = last;
-      if (!silent) put(prop, unit ? out + unit : String(out));
+      if (!silent) sink(unit ? out + unit : String(out));
       return true;
     };
     i.onchange = () => commit(i.value);
@@ -615,9 +717,19 @@ function adders(list) { const a = document.createElement("div"); a.className = "
   return a; }
 
 let tab = "edit";
+const bound = new Map();          // prop -> input, so an echo can refresh without a rebuild
+function refreshProps(st) {
+  if (tab !== "edit" || !st) return;
+  for (const [prop, i] of bound) {
+    if (i === document.activeElement) continue;
+    const raw = st[prop]; if (raw === undefined) continue;
+    const v = i.dataset.hex ? hex(raw) : i.dataset.px ? px(raw) : String(raw);
+    if (i.value !== v) i.value = v;
+  }
+}
 function drawProps() {
   if (tab !== "edit") return;
-  propsEl.textContent = "";
+  propsEl.textContent = ""; bound.clear();
   if (!sel) {
     const e = document.createElement("div"); e.className = "empty";
     e.innerHTML = "<b>Nothing selected</b>Click any element in the design to edit it here.";
@@ -716,11 +828,15 @@ addEventListener("message", (e) => {
     boardSel = file;
     if (m.prev !== undefined)
       record({ kind: "style", file, path: m.path, prop: m.prop, prev: m.prev, next: m.next });
-    if (same) return;   // echo of our own edit - keep the live input alive
+    if (same) { refreshProps(m.styles); return; }   // keep the live input, refresh the rest
     world.querySelectorAll(".board").forEach(n => n.classList.remove("selected"));
     let key = file; open.add(key);
     for (let i = 1; i < m.path.length; i++) open.add(file + ":" + m.path.slice(0, i).join("."));
     drawTree(); drawProps();
+  } else if (m.t === "resized" && file) {
+    record({ kind: "size", file, path: m.path, pw: m.pw, ph: m.ph, w: m.w, h: m.h });
+  } else if (m.t === "src" || m.t === "vars") {
+    const r = pend.get(m.id); if (r) { pend.delete(m.id); r(m.t === "src" ? m.html : m.vars); }
   } else if (m.t === "txt" && file) {
     record({ kind: "text", file, path: m.path, prev: m.prev, next: m.next });
   } else if (m.t === "tree" || m.t === "html") {
@@ -734,7 +850,7 @@ const wpt = (e) => [Math.round((e.clientX - view.x) / view.k), Math.round((e.cli
 viewport.addEventListener("pointerdown", (e) => {
   if (mode === "pen" || mode === "arrow") { const [x, y] = wpt(e);
     stroke = { d: `M${x} ${y}`, x0: x, y0: y, arrow: mode === "arrow", ...(pages.length ? { page } : {}) };
-    drawings.push(stroke); viewport.setPointerCapture(e.pointerId);
+    mark(); drawings.push(stroke); viewport.setPointerCapture(e.pointerId);
     strokeEl = mkPath(stroke); ink.append(strokeEl);            // one node, then mutate it
     viewport.setPointerCapture(e.pointerId); return; }
   if (mode === "note" && !e.target.closest(".note")) { placeNote(e); return; }
@@ -751,8 +867,8 @@ viewport.addEventListener("pointermove", (e) => {
   if (!drag) return;
   view.x = e.clientX - drag.x; view.y = e.clientY - drag.y; apply();
 });
-const endDrag = () => { drag = null; stroke = null; strokeEl = null;
-  viewport.classList.remove("panning"); };
+const endDrag = () => { if (stroke) commitCanvas("ink");
+  drag = null; stroke = null; strokeEl = null; viewport.classList.remove("panning"); };
 viewport.addEventListener("pointerup", endDrag);
 viewport.addEventListener("pointercancel", endDrag);
 viewport.addEventListener("wheel", (e) => {
@@ -816,21 +932,25 @@ function wireNote(el, n) {
     if (el.isContentEditable) return;
     e.stopPropagation();
     d = { x: e.clientX/view.k - (n.x||0), y: e.clientY/view.k - (n.y||0) };
-    el.classList.add("dragging"); el.setPointerCapture(e.pointerId);
+    mark(); el.classList.add("dragging"); el.setPointerCapture(e.pointerId);
   });
   el.addEventListener("pointermove", (e) => { if (!d) return;
     n.x = Math.round(e.clientX/view.k - d.x); n.y = Math.round(e.clientY/view.k - d.y);
     el.style.left = n.x + "px"; el.style.top = n.y + "px"; });
-  el.addEventListener("pointerup", () => { d = null; el.classList.remove("dragging"); });
+  el.addEventListener("pointerup", () => { if (d) commitCanvas("move note");
+    d = null; el.classList.remove("dragging"); });
   el.addEventListener("dblclick", (e) => { e.stopPropagation();
     el.contentEditable = "true"; el.focus(); });
-  el.addEventListener("blur", () => { el.contentEditable = "false"; n.text = el.textContent; });
+  el.addEventListener("focus", mark);
+  el.addEventListener("blur", () => { el.contentEditable = "false"; n.text = el.textContent;
+    commitCanvas("edit note"); });
 }
 function placeNote(e) {
   const [x, y] = wpt(e);
   let i = 1; while (notes.some(n => n.id === "note-" + i)) i++;
+  mark();
   notes.push({ id: "note-" + i, x, y, w: 240, text: "New note", ...(pages.length ? { page } : {}) });
-  render();
+  render(); commitCanvas("note");
 }
 function addArtboard() {
   const b = bounds();
@@ -839,9 +959,10 @@ function addArtboard() {
   files[name] = '<!doct' + 'ype html><meta charset="utf-8">' +
     '<style>body{margin:0;background:#fff;font-family:system-ui,sans-serif}</style>' +
     '<div style="padding:32px"></div>';
+  mark();
   boards.push({ file: name, x: b ? b.x2 + 80 : 0, y: b ? b.y1 + 26 : 0, w: 800, h: 600,
     ...(pages.length ? { page } : {}) });
-  render(); setMode("select");
+  render(); commitCanvas("artboard"); setMode("select");
 }
 function dl(file) {
   const blob = new Blob([files[file]], { type: "text/html" });
@@ -910,13 +1031,66 @@ $("#tabs").onclick = (e) => { const b = e.target.closest("button"); if (!b) retu
   treeEl.style.display = t === "edit" ? "" : "none";
   toolsEl.style.display = t === "edit" ? "" : "none";
   if (t === "edit") drawProps();
-  else { propsEl.textContent = "";
-    const e2 = document.createElement("div"); e2.className = "empty";
-    e2.innerHTML = t === "code"
-      ? "<b>Code</b>Not in this build. Save the canvas and edit the artboard files."
-      : "<b>Tweaks</b>Not in this build.";
-    propsEl.append(e2); }
+  else if (t === "code") drawCode();
+  else drawTweaks();
 };
+
+function pickFile() { return boardSel || (sel && sel.file) || boards.filter(onPage)[0]?.file; }
+function note(msg) { propsEl.textContent = "";
+  const e = document.createElement("div"); e.className = "empty"; e.innerHTML = msg;
+  propsEl.append(e); }
+
+function drawCode() {
+  const file = pickFile();
+  if (!file) return note("<b>Code</b>Select an artboard first.");
+  const f = frames.get(file);
+  propsEl.textContent = "";
+  const sec = section(file.replace(/\.html$/i, ""));
+  const ta = document.createElement("textarea");
+  ta.style.cssText = "min-height:52vh;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace";
+  ta.spellcheck = false; ta.value = files[file];
+  const bar = document.createElement("div"); bar.className = "g"; bar.style.marginTop = "8px";
+  const apply = document.createElement("button");
+  apply.className = "btn"; apply.textContent = "Apply";
+  apply.onclick = () => { if (ta.value === files[file]) return;
+    mark0(file); files[file] = ta.value; _rcache.clear(); render(); askTree(file);
+    record({ kind: "src", file, prev: srcPrev, next: ta.value });
+    apply.textContent = "Applied"; setTimeout(() => apply.textContent = "Apply", 1100); };
+  const rev = document.createElement("button");
+  rev.className = "btn ghost"; rev.textContent = "Revert";
+  rev.onclick = () => { ta.value = files[file]; };
+  bar.append(apply, rev);
+  sec.append(ta, bar); propsEl.append(sec);
+  if (f) { const id = ++seq; pend.set(id, (html) => { if (html) { ta.value = html; } });
+    tellAgent(f, { t: "src", id }); }
+}
+let srcPrev = "";
+const mark0 = (file) => { srcPrev = files[file]; };
+
+function drawTweaks() {
+  const file = pickFile();
+  if (!file) return note("<b>Tweaks</b>Select an artboard first.");
+  const f = frames.get(file);
+  if (!f) return note("<b>Tweaks</b>Artboard is not loaded.");
+  const id = ++seq;
+  pend.set(id, (vars) => {
+    const keys = Object.keys(vars || {}).sort();
+    if (!keys.length) return note("<b>No design tokens</b>This artboard defines no CSS custom "
+      + "properties on :root, html or body.");
+    propsEl.textContent = "";
+    const sec = section("Design tokens", () => { for (const k of keys)
+      tellAgent(f, { t: "setvar", name: k, value: "" }); setTimeout(() => drawTweaks(), 120); });
+    for (const k of keys) {
+      const v = vars[k];
+      const isColor = /^#|^rgb|^hsl|^oklch/i.test(v);
+      sec.append(grp(fld({ label: k.replace(/^--/, ""), value: isColor ? v.toUpperCase() : v,
+        prop: k, kind: isColor ? "color" : "text", set: true,
+        onSet: (nv) => tellAgent(f, { t: "setvar", name: k, value: nv }) })));
+    }
+    propsEl.append(sec);
+  });
+  tellAgent(f, { t: "vars", id });
+}
 $("#zoom-in").onclick = () => { touched = true; view.k = Math.min(4, view.k*1.25); apply(); };
 $("#zoom-out").onclick = () => { touched = true; view.k = Math.max(.05, view.k/1.25); apply(); };
 $("#fit").onclick = () => { touched = false; fit(); };

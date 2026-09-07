@@ -1,0 +1,78 @@
+#!/usr/bin/env node
+// Drives seed.mjs end to end. Node only, no browser.
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync, readFileSync, rmSync, readdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HERE = dirname(fileURLToPath(import.meta.url));
+const SEED = join(HERE, "..", "assets", "seed.mjs");
+const TPL = join(HERE, "..", "assets", "canvas.template.html");
+const dir = mkdtempSync(join(tmpdir(), "cardstock-"));
+let pass = 0, fail = 0;
+
+const ok = (name, cond, extra) => {
+  if (cond) { pass++; console.log("  ok   " + name); }
+  else { fail++; console.log("  FAIL " + name + (extra ? "\n       " + extra : "")); }
+};
+const run = (args) => execFileSync(process.execPath, [SEED, ...args],
+  { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+const rejects = (args) => { try { run(args); return null; } catch (e) { return (e.stderr || "").trim(); } };
+
+const ART = `<!doct` + `ype html><meta charset="utf-8"><title>Main</title>
+<style>body{margin:0;font-family:system-ui}</style>
+<div style="padding:24px"><h1 style="margin:0">Hello</h1></div>`;
+// content that would break a naive state block
+const EVIL = `<!doct` + `ype html><meta charset="utf-8"><title>Evil</title>
+<p>closer: </scr` + `ipt> comment: <` + `!-- x --> unicode: — ñ é</p>`;
+
+writeFileSync(join(dir, "Main.html"), ART);
+writeFileSync(join(dir, "Evil.html"), EVIL);
+writeFileSync(join(dir, "canvas.json"), JSON.stringify({
+  artboards: [{ file: "Main.html", x: 0, y: 0, w: 720, h: 420 },
+              { file: "Evil.html", x: 800, y: 0, w: 720, h: 420 }],
+  notes: [{ id: "n1", x: 0, y: -120, w: 240, text: "a\nb" }],
+  launch: { view: "canvas" },
+}, null, 2));
+
+console.log("\nseed / check / extract");
+const out = run(["--template", TPL, "--out", "spring-menu.html", "--title", "Spring Menu",
+  "--artboard", "Main.html", "--artboard", "Evil.html", "--canvas", "canvas.json"]);
+ok("seeds two artboards", /2 artboards/.test(out), out.trim());
+ok("check passes", /^ok:/.test(run(["--check", "spring-menu.html"])));
+run(["--extract", "spring-menu.html", "--to", "back"]);
+const back = readdirSync(join(dir, "back")).sort();
+ok("extract writes files back", back.join(",") === "Evil.html,Main.html,canvas.json", back.join(","));
+ok("round-trip is byte-identical", readFileSync(join(dir, "back", "Main.html"), "utf8") === ART);
+ok("adversarial content survives", readFileSync(join(dir, "back", "Evil.html"), "utf8") === EVIL);
+
+console.log("\nHTML parser safety");
+const page = readFileSync(join(dir, "spring-menu.html"), "utf8");
+const i = page.lastIndexOf("<scr" + "ipt>") + 8, j = page.lastIndexOf("</scr" + "ipt>");
+const block = page.slice(i, j);
+ok("no bare comment opener in the script block", !block.includes("<" + "!--"));
+ok("no bare script opener in the script block", !block.includes("<scr" + "ipt"));
+ok("no bare script closer in the script block", !block.includes("</scr" + "ipt"));
+
+console.log("\ninput guards");
+ok("rejects a placeholder filename",
+  /placeholder name/.test(rejects(["--template", TPL, "--out", "index.html", "--title", "X Y",
+    "--artboard", "Main.html"]) || ""));
+ok("rejects a placeholder title",
+  /placeholder/.test(rejects(["--template", TPL, "--out", "a-poster.html", "--title", "Untitled",
+    "--artboard", "Main.html"]) || ""));
+ok("rejects a manifest naming an unseeded artboard",
+  /was not passed/.test(rejects(["--template", TPL, "--out", "a-poster.html", "--title", "A Poster",
+    "--artboard", "Main.html", "--canvas", "canvas.json"]) || ""));
+ok("rejects a badly named artboard",
+  /must be named/.test(rejects(["--template", TPL, "--out", "a-poster.html", "--title", "A Poster",
+    "--artboard", "canvas.json"]) || ""));
+ok("rejects extract into a non-empty directory",
+  /not empty/.test(rejects(["--extract", "spring-menu.html", "--to", "back"]) || ""));
+ok("rejects a page that is not a canvas",
+  /not a design-canvas page/.test(rejects(["--check", "Main.html"]) || ""));
+
+rmSync(dir, { recursive: true, force: true });
+console.log(`\n${pass} passed, ${fail} failed\n`);
+process.exit(fail ? 1 : 0);
