@@ -273,9 +273,11 @@ addEventListener('message',(e)=>{const m=e.data||{};
   if(m.t==='mode'){on=!!m.on;if(!on){box.style.opacity='0';hov.style.opacity='0';}}
   else if(m.t==='tree'){parent.postMessage({t:'tree',id:m.id,tree:document.body?tree(document.body,0):null},'*');}
   else if(m.t==='pick'){const el=E(m.path);if(el){cur=el;place(box,el,3);parent.postMessage({t:'sel',...info(el)},'*');}}
-  else if(m.t==='style'){const el=E(m.path);if(el){el.style[m.prop]=m.value;place(box,el,3);
-    parent.postMessage({t:'sel',...info(el)},'*');}}
-  else if(m.t==='text'){const el=E(m.path);if(el){el.textContent=m.value;place(box,el,3);}}
+  else if(m.t==='style'){const el=E(m.path);if(el){const pv=el.style[m.prop];
+    el.style[m.prop]=m.value;place(box,el,3);
+    parent.postMessage({t:'sel',...info(el),prev:pv,next:m.value,prop:m.prop,tag_:m.tag_},'*');}}
+  else if(m.t==='text'){const el=E(m.path);if(el){const pv=el.textContent;el.textContent=m.value;
+    place(box,el,3);parent.postMessage({t:'txt',path:m.path,prev:pv,next:m.value},'*');}}
   else if(m.t==='serialize'){const c=document.documentElement.cloneNode(true);
     c.querySelectorAll('[data-dc-agent],[data-dc-ui]').forEach(n=>n.remove());
     parent.postMessage({t:'html',id:m.id,html:'<!doct'+'ype html>\\n'+c.outerHTML},'*');}
@@ -294,7 +296,10 @@ addEventListener('click',(e)=>{if(!on)return;e.preventDefault();e.stopPropagatio
 addEventListener('scroll',()=>{if(cur)place(box,cur,3);},true);
 })();` + "</scr" + "ipt>";
 
+const _rcache = new Map();
 function resolve(src, withAgent) {
+  const ck = (withAgent === false ? "0" : "1") + src;
+  const hit = _rcache.get(ck); if (hit !== undefined) return hit;
   let out = src;
   for (const [name, data] of Object.entries(files)) {
     if (!IMG.test(name)) continue;
@@ -304,7 +309,10 @@ function resolve(src, withAgent) {
     out = out.replace(new RegExp('src="\\.?/?' + esc + '"', "g"), 'src="' + uri + '"');
     out = out.replace(new RegExp("url\\((['\"]?)\\.?/?" + esc + "\\1\\)", "g"), "url(" + uri + ")");
   }
-  return withAgent === false ? out : out + AGENT;
+  out = withAgent === false ? out : out + AGENT;
+  if (_rcache.size > 64) _rcache.clear();
+  _rcache.set(ck, out);
+  return out;
 }
 
 /* ---- icons ---------------------------------------------------------------- */
@@ -363,6 +371,10 @@ function setMode(m) {
 }
 addEventListener("keydown", (e) => {
   if (e.target.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
+    e.preventDefault(); step(!e.shiftKey); return;
+  }
+  if (e.metaKey || e.ctrlKey) return;
   const t = TOOLS.find(t => t[2] === e.key.toLowerCase());
   if (t) setMode(t[0]);
   if (e.key === "Escape") { $("#focus").classList.remove("on"); deselect(); }
@@ -371,7 +383,7 @@ addEventListener("keydown", (e) => {
 /* ---- canvas render -------------------------------------------------------- */
 function render() {
   world.querySelectorAll(".board, .note").forEach(n => n.remove());
-  frames.clear();
+  frames.clear(); _openSig = null;
   for (const b of boards) {
     if (!onPage(b) || files[b.file] === undefined) continue;
     const el = document.createElement("div");
@@ -420,10 +432,10 @@ const apply = () => {
 const pend = new Map(); let seq = 0;
 function askTree(file) {
   const f = frames.get(file); if (!f) return;
-  const id = ++seq; pend.set(id, (t) => { trees.set(file, t); drawTree(); });
+  const id = ++seq; pend.set(id, (t) => { trees.set(file, t); _openSig = null; drawTree(); });
   tellAgent(f, { t: "tree", id });
 }
-function row({ depth, name, right, kind, on, onClick, onToggle, hasKids, isOpen }) {
+function row({ depth, name, right, kind, on, onClick, onToggle, hasKids, isOpen, key }) {
   const r = document.createElement("div");
   r.className = "tr" + (kind === "ab" ? " ab" : "") + (on ? " on" : "");
   r.style.paddingLeft = (10 + depth * 14) + "px";
@@ -437,9 +449,18 @@ function row({ depth, name, right, kind, on, onClick, onToggle, hasKids, isOpen 
   const rt = document.createElement("span"); rt.className = "rt"; rt.textContent = right;
   r.append(cv, gl, nm, rt);
   r.onclick = onClick;
+  if (key !== undefined) r.dataset.k = key;
   return r;
 }
+let _openSig = null;
+function markTree() {   // selection-only change: move the highlight, do not rebuild
+  const want = sel ? sel.file + ":" + sel.path.join(".") : boardSel;
+  for (const r of treeEl.children) r.classList.toggle("on", r.dataset.k === want);
+}
 function drawTree() {
+  const sig = [...open].sort().join("|") + "#" + (pages.length ? page : "");
+  if (sig === _openSig && treeEl.children.length) return markTree();
+  _openSig = sig;
   treeEl.textContent = "";
   for (const b of boards) {
     if (!onPage(b)) continue;
@@ -451,7 +472,7 @@ function drawTree() {
       right: (b.w || 800) + " × " + (b.h || 600),
       on: boardSel === b.file && !sel, hasKids: !!(t && t.kids.length), isOpen,
       onToggle: () => { isOpen ? open.delete(key) : open.add(key); drawTree(); },
-      onClick: () => selectBoard(b.file),
+      onClick: () => selectBoard(b.file), key,
     }));
     if (isOpen && t) walk(t.kids, b.file, 1);
   }
@@ -471,7 +492,7 @@ function walk(kids, file, depth) {
       hasKids: n.kids.length > 0, isOpen,
       onToggle: () => { isOpen ? open.delete(key) : open.add(key); drawTree(); },
       onClick: () => { const f = frames.get(file);
-        if (f) { boardSel = file; tellAgent(f, { t: "pick", path: n.path }); } },
+        if (f) { boardSel = file; tellAgent(f, { t: "pick", path: n.path }); } }, key,
     }));
     if (isOpen) walk(n.kids, file, depth + 1);
   }
@@ -489,6 +510,23 @@ function deselect() { sel = null; boardSel = null; bcast({ t: "deselect" });
 const px = (v) => (v || "").replace(/px$/, "");
 const hex = (c) => { const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/.exec(c || "");
   return m ? "#" + [1,2,3].map(i => (+m[i]).toString(16).padStart(2, "0")).join("").toUpperCase() : "#000000"; };
+const hist = []; let hpos = 0, replaying = false;
+function record(e) {
+  if (replaying) return;
+  hist.length = hpos; hist.push(e); hpos = hist.length;
+  if (hist.length > 200) { hist.shift(); hpos--; }
+}
+function step(back) {
+  const e = back ? hist[hpos - 1] : hist[hpos];
+  if (!e) return;
+  const f = frames.get(e.file); if (!f) return;
+  replaying = true;
+  const v = back ? e.prev : e.next;
+  tellAgent(f, e.kind === "text" ? { t: "text", path: e.path, value: v }
+                                 : { t: "style", path: e.path, prop: e.prop, value: v });
+  hpos += back ? -1 : 1;
+  setTimeout(() => { replaying = false; }, 60);
+}
 const put = (prop, v) => { if (!sel) return; const f = frames.get(sel.file);
   if (f) tellAgent(f, { t: "style", path: sel.path, prop, value: v }); };
 
@@ -576,7 +614,9 @@ function adders(list) { const a = document.createElement("div"); a.className = "
     const s = document.createElement("span"); s.textContent = t; a.append(s); });
   return a; }
 
+let tab = "edit";
 function drawProps() {
+  if (tab !== "edit") return;
   propsEl.textContent = "";
   if (!sel) {
     const e = document.createElement("div"); e.className = "empty";
@@ -589,8 +629,9 @@ function drawProps() {
   if (sel.text !== null && sel.text !== undefined) {
     const s = section("Content");
     const ta = document.createElement("textarea"); ta.value = sel.text;
-    ta.oninput = () => { const f = frames.get(sel.file);
-      if (f) tellAgent(f, { t: "text", path: sel.path, value: ta.value }); };
+    const owner = { file: sel.file, path: sel.path };   // bind to the element it was built for
+    ta.oninput = () => { const f = frames.get(owner.file);
+      if (f) tellAgent(f, { t: "text", path: owner.path, value: ta.value }); };
     s.append(ta); propsEl.append(s);
   }
 
@@ -673,23 +714,29 @@ addEventListener("message", (e) => {
     const same = sel && (sel.file + ":" + sel.path.join(".")) === selKey;
     sel = { file, path: m.path, styles: m.styles, inline: m.inline, text: m.text, tag: m.tag };
     boardSel = file;
+    if (m.prev !== undefined)
+      record({ kind: "style", file, path: m.path, prop: m.prop, prev: m.prev, next: m.next });
     if (same) return;   // echo of our own edit - keep the live input alive
     world.querySelectorAll(".board").forEach(n => n.classList.remove("selected"));
     let key = file; open.add(key);
-    for (let i = 1; i <= m.path.length; i++) open.add(file + ":" + m.path.slice(0, i).join("."));
+    for (let i = 1; i < m.path.length; i++) open.add(file + ":" + m.path.slice(0, i).join("."));
     drawTree(); drawProps();
+  } else if (m.t === "txt" && file) {
+    record({ kind: "text", file, path: m.path, prev: m.prev, next: m.next });
   } else if (m.t === "tree" || m.t === "html") {
     const r = pend.get(m.id); if (r) { pend.delete(m.id); r(m.tree !== undefined ? m.tree : m.html); }
   }
 });
 
 /* ---- pan / zoom ----------------------------------------------------------- */
-let drag = null, stroke = null;
+let drag = null, stroke = null, strokeEl = null;
 const wpt = (e) => [Math.round((e.clientX - view.x) / view.k), Math.round((e.clientY - view.y) / view.k)];
 viewport.addEventListener("pointerdown", (e) => {
   if (mode === "pen" || mode === "arrow") { const [x, y] = wpt(e);
     stroke = { d: `M${x} ${y}`, x0: x, y0: y, arrow: mode === "arrow", ...(pages.length ? { page } : {}) };
-    drawings.push(stroke); viewport.setPointerCapture(e.pointerId); paintInk(); return; }
+    drawings.push(stroke); viewport.setPointerCapture(e.pointerId);
+    strokeEl = mkPath(stroke); ink.append(strokeEl);            // one node, then mutate it
+    viewport.setPointerCapture(e.pointerId); return; }
   if (mode === "note" && !e.target.closest(".note")) { placeNote(e); return; }
   if (e.target.closest(".board") || e.target.closest(".note")) return;
   deselect();
@@ -699,11 +746,13 @@ viewport.addEventListener("pointerdown", (e) => {
 viewport.addEventListener("pointermove", (e) => {
   if (stroke) { const [x, y] = wpt(e);
     if (stroke.arrow) { stroke.x1 = x; stroke.y1 = y; } else stroke.d += ` L${x} ${y}`;
-    paintInk(); return; }
+    if (strokeEl) strokeEl.setAttribute("d", pathD(stroke));    // no full rebuild per frame
+    return; }
   if (!drag) return;
   view.x = e.clientX - drag.x; view.y = e.clientY - drag.y; apply();
 });
-const endDrag = () => { drag = null; stroke = null; viewport.classList.remove("panning"); };
+const endDrag = () => { drag = null; stroke = null; strokeEl = null;
+  viewport.classList.remove("panning"); };
 viewport.addEventListener("pointerup", endDrag);
 viewport.addEventListener("pointercancel", endDrag);
 viewport.addEventListener("wheel", (e) => {
@@ -735,22 +784,28 @@ let rt = null;
 addEventListener("resize", () => { if (touched) return; clearTimeout(rt); rt = setTimeout(fit, 120); });
 
 /* ---- ink ------------------------------------------------------------------ */
-function paintInk() {
-  ink.textContent = "";
-  for (const d of drawings) {
-    if (pages.length && (d.page || pages[0].id) !== page) continue;
-    const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    let dd = d.d;
+function pathD(d) {
+  let dd = d.d;
     if (d.arrow && d.x1 !== undefined) {
       const a = Math.atan2(d.y1 - d.y0, d.x1 - d.x0), L = 14;
       dd = `M${d.x0} ${d.y0} L${d.x1} ${d.y1}` +
         ` M${d.x1} ${d.y1} L${d.x1 - L*Math.cos(a - .4)} ${d.y1 - L*Math.sin(a - .4)}` +
         ` M${d.x1} ${d.y1} L${d.x1 - L*Math.cos(a + .4)} ${d.y1 - L*Math.sin(a + .4)}`;
     }
-    p.setAttribute("d", dd); p.setAttribute("fill", "none");
-    p.setAttribute("stroke", d.stroke || "#e0568c"); p.setAttribute("stroke-width", d.width || 3);
-    p.setAttribute("stroke-linecap", "round"); p.setAttribute("stroke-linejoin", "round");
-    ink.append(p);
+  return dd;
+}
+function mkPath(d) {
+  const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  p.setAttribute("d", pathD(d)); p.setAttribute("fill", "none");
+  p.setAttribute("stroke", d.stroke || "#e0568c"); p.setAttribute("stroke-width", d.width || 3);
+  p.setAttribute("stroke-linecap", "round"); p.setAttribute("stroke-linejoin", "round");
+  return p;
+}
+function paintInk() {
+  ink.textContent = "";
+  for (const d of drawings) {
+    if (pages.length && (d.page || pages[0].id) !== page) continue;
+    ink.append(mkPath(d));
   }
 }
 
@@ -851,7 +906,7 @@ $("#t-toggle").onclick = () => {
 };
 $("#tabs").onclick = (e) => { const b = e.target.closest("button"); if (!b) return;
   $("#tabs").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
-  const t = b.dataset.tab;
+  const t = tab = b.dataset.tab;
   treeEl.style.display = t === "edit" ? "" : "none";
   toolsEl.style.display = t === "edit" ? "" : "none";
   if (t === "edit") drawProps();

@@ -188,12 +188,25 @@ put the HTML parser into script-data-double-escaped state, `</script>` stops clo
 script is left unterminated and never executes - silently, with no console error. Split them
 (`"<" + "!--"`, `` `<scr` + `ipt>` ``). The template does this deliberately; keep it that way.
 
+## Performance rules
+
+These are the paths that actually get hot; keep them that way.
+
+- **Drawing mutates one node.** A stroke appends a single `<path>` on pointerdown and rewrites its
+  `d` on move. Rebuilding the whole ink layer per frame was the original cost - 200 moves now take
+  under a millisecond and leave one node.
+- **`resolve()` is cached per source string.** It inlines every base64 image with a regex per
+  image; without the cache that reran on every render.
+- **The layer tree rebuilds only when its shape changes.** A selection that opens no new ancestors
+  just moves the `.on` class. Only ancestors go into the open set - never the selected leaf, which
+  has nothing to expand.
+
 ## Known limits
 
-- The panel edits one element at a time. No multi-select, no drag-to-move elements, no layer tree.
-- No shape or text tools yet - no rectangle, ellipse, arrow, or text insertion.
-- No undo/redo. Save downloads a new file rather than overwriting in place, so the previous file
-  is the undo step.
+- The panel edits one element at a time. No multi-select, and the corner handles are drawn but do
+  not resize yet.
+- Undo/redo covers style and text edits (200 steps). It does not cover notes, ink, or artboards.
 - Export PDF goes through the browser's print dialog. There is no per-artboard PNG export.
+- Code and Tweaks are placeholders.
 - Webfonts load from Google Fonts by `<link>`. Anything else must be a `@font-face` data: URI
   inside the artboard.
