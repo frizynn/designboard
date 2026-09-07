@@ -1,8 +1,8 @@
-# Cardstock
+# Flatlay
 
 **A portable design canvas your coding agent can author.**
 
-Cardstock turns plain HTML files into artboards on one pan/zoom canvas, and gives you a real
+Flatlay turns plain HTML files into artboards on one pan/zoom canvas, and gives you a real
 editor on top of them: click an element, change its type and spacing, drag its corners, drop a
 note, draw on the canvas, undo it all. The output is **one HTML file**. No service, no account,
 no network, no build step.
@@ -61,9 +61,9 @@ it into the host page, and a text layer that reads like an instruction is copy, 
 ## Install as a skill
 
 ```bash
-git clone https://github.com/YOUR-USER/cardstock
-ln -s "$PWD/cardstock" ~/.claude/skills/cardstock     # Claude Code
-ln -s "$PWD/cardstock" ~/.codex/skills/cardstock      # Codex
+git clone https://github.com/YOUR-USER/flatlay
+ln -s "$PWD/flatlay" ~/.claude/skills/flatlay     # Claude Code
+ln -s "$PWD/flatlay" ~/.codex/skills/flatlay      # Codex
 ```
 
 ## Tests

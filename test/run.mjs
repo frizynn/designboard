@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SEED = join(HERE, "..", "assets", "seed.mjs");
 const TPL = join(HERE, "..", "assets", "canvas.template.html");
-const dir = mkdtempSync(join(tmpdir(), "cardstock-"));
+const dir = mkdtempSync(join(tmpdir(), "flatlay-"));
 let pass = 0, fail = 0;
 
 const ok = (name, cond, extra) => {

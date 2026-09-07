@@ -1,10 +1,10 @@
 {
-  "name": "cardstock",
+  "name": "flatlay",
   "version": "0.1.0",
   "description": "A portable design canvas your coding agent can author: HTML artboards on one pan/zoom canvas, edited in place, saved as a single file.",
   "license": "MIT",
   "type": "module",
-  "bin": { "cardstock": "./assets/seed.mjs" },
+  "bin": { "flatlay": "./assets/seed.mjs" },
   "files": ["assets", "references", "SKILL.md", "README.md", "LICENSE"],
   "scripts": { "test": "node test/run.mjs" },
   "keywords": ["design", "canvas", "artboard", "mockup", "wireframe",
