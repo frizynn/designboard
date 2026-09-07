@@ -29,7 +29,8 @@ if (opt.check) { check(opt.check); process.exit(0); }
 if (opt.extract) { extract(opt.extract, opt.to); process.exit(0); }
 if (!opt.template || !opt.out || !opt.title || !opt.artboard.length)
   die("need --template, --out, --title and at least one --artboard "
-    + "(or --check <page>, or --extract <page> --to <fresh dir>)");
+    + "(or --check <page>, or --extract <page> --to <fresh dir>). "
+    + "Add --mode view for a read-only canvas.");
 
 // ---- validate names ---------------------------------------------------------
 const outName = basename(opt.out);
@@ -135,7 +136,9 @@ for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) {
 }
 
 // ---- emit -------------------------------------------------------------------
-const state = JSON.stringify({ title: opt.title, files, canvas })
+if (opt.mode && opt.mode !== "edit" && opt.mode !== "view")
+  die(`--mode must be "edit" (default) or "view"`);
+const state = JSON.stringify({ title: opt.title, mode: opt.mode || "edit", files, canvas })
   .replace(/<\/script/gi, "<\\/script")
   .replace(/<!--/g, "<\\!--");
 
@@ -147,7 +150,8 @@ writeFileSync(opt.out, tpl);
 const kb = Math.round(Buffer.byteLength(tpl) / 1024);
 const nb = (canvas.artboards || []).length;
 console.log(`seeded ${opt.out} - "${opt.title}", ${nb} artboard${nb === 1 ? "" : "s"}, `
-  + `${imgNames.size} image${imgNames.size === 1 ? "" : "s"}, ${kb} KB`);
+  + `${imgNames.size} image${imgNames.size === 1 ? "" : "s"}, ${kb} KB`
+  + (opt.mode === "view" ? " (view-only)" : ""));
 
 // ---- helpers ----------------------------------------------------------------
 function escapeHtml(s) {

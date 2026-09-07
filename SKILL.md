@@ -211,12 +211,21 @@ These are the paths that actually get hot; keep them that way.
   just moves the `.on` class. Only ancestors go into the open set - never the selected leaf, which
   has nothing to expand.
 
+## Modes
+
+- **Edit** (default) - the full sidebar and tools.
+- **Present** (`P`, or the Present button) - one artboard at a time, scaled to the window, arrows
+  or space to move, Escape to leave. A deck is just a series of same-size artboards; there is no
+  separate slide format.
+- **View** (`--mode view` at seed time) - a read-only canvas: no sidebar, no tools, no Save. Pan,
+  zoom, Present and Export PDF still work. Use it for the copy you hand to someone else.
+
 ## Known limits
 
 - The panel edits one element at a time. No multi-select, and the corner handles are drawn but do
   not resize yet.
 - Undo/redo covers style and text edits (200 steps). It does not cover notes, ink, or artboards.
 - Export PDF goes through the browser's print dialog. There is no per-artboard PNG export.
-- Code and Tweaks are placeholders.
+
 - Webfonts load from Google Fonts by `<link>`. Anything else must be a `@font-face` data: URI
   inside the artboard.

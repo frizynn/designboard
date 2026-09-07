@@ -59,6 +59,11 @@
   #topbar .sp{flex:1}
   #t-toggle{width:30px;height:26px;border-radius:6px;display:grid;place-items:center;
     background:var(--accent);color:#fff}
+  #t-present{padding:5px 12px;border-radius:7px;color:var(--muted);
+    transition:background var(--t-hover) var(--ease),color var(--t-hover) var(--ease),
+      transform var(--t-tap) var(--ease-out)}
+  #t-present:hover{background:var(--field);color:var(--ink)}
+  #t-present:active{transform:scale(.97)}
   #t-save{padding:5px 14px;border-radius:7px;border:1px solid var(--line);color:var(--ink);
     transition:background var(--t-hover) var(--ease),transform var(--t-tap) var(--ease-out)}
   #t-save:active{transform:scale(.97)}
@@ -174,9 +179,25 @@
     #t-toggle:active,.board-strip .ic button:active{transform:none}
   }
 
+  body.view #side,body.view #tools,body.view #tabs{display:none}
+  body.view #app{--noop:0}
+  body.view #side{display:none}
+  #stagebar{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:40;
+    display:none;align-items:center;gap:6px;padding:6px 8px;background:var(--side);
+    border:1px solid var(--line);border-radius:9px;box-shadow:0 6px 20px rgb(0 0 0/.45)}
+  body.present #stagebar{display:flex}
+  #stagebar button{padding:5px 11px;border-radius:6px;color:var(--muted);
+    transition:background var(--t-hover) var(--ease),color var(--t-hover) var(--ease),
+      transform var(--t-tap) var(--ease-out)}
+  #stagebar button:active{transform:scale(.96)}
+  #slide-n{color:var(--muted);font-variant-numeric:tabular-nums;min-width:54px;text-align:center}
+  body.present #topbar,body.present #bar,body.present #side,body.present #deny{display:none}
   #focus{position:fixed;inset:0;z-index:30;background:var(--bg);display:none}
   #focus.on{display:block}
   #focus iframe{width:100%;height:100%;border:0;background:#fff}
+  body.present #focus{background:#0d0d0d;display:grid;place-items:center;padding:34px 34px 74px}
+  body.present #focus iframe{border-radius:3px;box-shadow:0 12px 44px rgb(0 0 0/.6)}
+  body.present #focus-close{display:none}
   #focus-close{position:fixed;top:14px;right:14px;z-index:31;padding:6px 14px;
     background:var(--side);border:1px solid var(--line);border-radius:7px}
   #print-out{position:absolute;left:-100000px;top:0;width:1px;height:1px;overflow:hidden}
@@ -196,6 +217,7 @@
     <div id="deny">Drop inside an artboard</div>
     <div id="topbar">
       <span id="doc-title">__CANVAS_TITLE__</span><span class="sp"></span>
+      <button id="t-present" title="Present (P)">Present</button>
       <button id="t-toggle" title="Toggle sidebar"></button>
       <button id="t-save">Save</button>
     </div>
@@ -219,6 +241,11 @@
   </aside>
 </div>
 <div id="focus"><button id="focus-close">Close</button></div>
+<div id="stagebar">
+  <button id="s-prev">&larr;</button><span id="slide-n"></span>
+  <button id="s-next">&rarr;</button><span class="sep"></span>
+  <button id="s-exit">Exit</button>
+</div>
 <div id="print-out"></div>
 
 <script id="canvas-doc" type="application/json">__CANVAS_STATE__</script>
@@ -458,6 +485,8 @@ addEventListener("keydown", (e) => {
     e.preventDefault(); step(!e.shiftKey); return;
   }
   if (e.metaKey || e.ctrlKey) return;
+  if (e.key.toLowerCase() === "p") { present(!document.body.classList.contains("present")); return; }
+  if (readOnly) return;
   const t = TOOLS.find(t => t[2] === e.key.toLowerCase());
   if (t) setMode(t[0]);
   if (e.key === "Escape") { $("#focus").classList.remove("on"); deselect(); }
@@ -1164,6 +1193,42 @@ $("#zoom-in").onclick = () => { touched = true; view.k = Math.min(4, view.k*1.25
 $("#zoom-out").onclick = () => { touched = true; view.k = Math.max(.05, view.k/1.25); apply(); };
 $("#fit").onclick = () => { touched = false; fit(); };
 
+/* ---- present mode --------------------------------------------------------- */
+let slide = -1;
+const deck = () => boards.filter(b => onPage(b) && files[b.file] !== undefined);
+function showSlide(i) {
+  const d = deck(); if (!d.length) return;
+  slide = (i + d.length) % d.length;
+  const b = d[slide];
+  focusEl.querySelectorAll("iframe").forEach(n => n.remove());
+  const f = document.createElement("iframe");
+  f.setAttribute("sandbox", "allow-scripts");
+  f.srcdoc = resolve(files[b.file], false);
+  const pad = 68, maxW = innerWidth - pad, maxH = innerHeight - pad - 40;
+  const k = Math.min(maxW / (b.w || 800), maxH / (b.h || 600), 1.6);
+  f.style.width = Math.round((b.w || 800) * k) + "px";
+  f.style.height = Math.round((b.h || 600) * k) + "px";
+  focusEl.append(f);
+  $("#slide-n").textContent = (slide + 1) + " / " + d.length;
+}
+function present(on) {
+  document.body.classList.toggle("present", on);
+  focusEl.classList.toggle("on", on);
+  if (on) { showSlide(slide < 0 ? 0 : slide); }
+  else { slide = -1; focusEl.querySelectorAll("iframe").forEach(n => n.remove()); }
+}
+$("#s-next").onclick = () => showSlide(slide + 1);
+$("#s-prev").onclick = () => showSlide(slide - 1);
+$("#s-exit").onclick = () => present(false);
+addEventListener("resize", () => { if (document.body.classList.contains("present")) showSlide(slide); });
+addEventListener("keydown", (e) => {
+  if (!document.body.classList.contains("present")) return;
+  if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") {
+    e.preventDefault(); showSlide(slide + 1); }
+  else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); showSlide(slide - 1); }
+  else if (e.key === "Escape") present(false);
+}, true);
+
 /* ---- pages / boot --------------------------------------------------------- */
 const pagesSel = $("#pages");
 if (pages.length) {
@@ -1173,6 +1238,9 @@ if (pages.length) {
   pagesSel.onchange = () => { page = pagesSel.value; touched = false;
     render(); paintInk(); drawTree(); fit(); };
 }
+const readOnly = DOC.mode === "view";
+if (readOnly) { document.body.classList.add("view"); $("#t-save").remove(); }
+$("#t-present").onclick = () => present(true);
 const launch = manifest.launch || { view: "canvas" };
 page = pages.length ? (launch.page || pages[0].id) : null;
 if (pages.length) pagesSel.value = page;
