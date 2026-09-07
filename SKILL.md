@@ -124,6 +124,13 @@ The chrome follows a small motion contract; keep it if you touch the template.
   broken even when it worked.
 - **Hover lives behind `@media (hover:hover) and (pointer:fine)`** so touch never strands a hover
   state, and everything collapses under `prefers-reduced-motion: reduce`.
+- **The sidebar slides on `transform`, never on width.** It is absolutely positioned over the
+  stage precisely so the toggle costs no layout: the stage holds live iframes, and reflowing them
+  every frame would drop the animation. `fit()` subtracts the sidebar width when it is open.
+- **Every numeric field validates, clamps and reverts.** Opacity is 0-1, radius and gap are >= 0,
+  font size 1-400, and keywords (`auto`, `normal`, `100%`, `fit-content`) are accepted per property.
+  Letters revert to the last good value and flash rose. Arrow keys nudge by the field's step, shift
+  by 10, alt by 0.1 - a design tool where you can type `123` into opacity is not finished.
 - **Never rebuild the properties panel while an input is live.** Style edits echo back from the
   artboard agent; rebuilding on that echo destroys the control mid-drag and breaks the colour
   picker. Rebuild only when the selected element actually changes.

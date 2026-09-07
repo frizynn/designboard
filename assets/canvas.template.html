@@ -22,8 +22,8 @@
   :focus-visible{outline:2px solid #6b8fd4;outline-offset:1px;border-radius:4px}
   .f:focus-within{border-color:#6b8fd4}
 
-  #app{display:flex;height:100%}
-  #stage{position:relative;flex:1;min-width:0}
+  #app{position:relative;height:100%;overflow:hidden}
+  #stage{position:absolute;inset:0}
   #viewport{position:absolute;inset:0;overflow:hidden;cursor:grab}
   #viewport.panning{cursor:grabbing}
   #viewport.pen{cursor:crosshair}
@@ -50,7 +50,7 @@
   .note[contenteditable=true]{outline:2px solid var(--hand);cursor:text}
 
   #topbar{position:absolute;top:0;left:0;right:0;height:46px;display:flex;align-items:center;
-    gap:10px;padding:0 14px;pointer-events:none}
+    gap:10px;padding:0 344px 0 14px;pointer-events:none;z-index:6}
   #topbar>*{pointer-events:auto}
   #doc-title{color:var(--muted);font-size:13px}
   #topbar .sp{flex:1}
@@ -63,21 +63,28 @@
   #t-toggle{transition:transform var(--t-tap) var(--ease-out),filter var(--t-hover) var(--ease)}
   #t-toggle:active{transform:scale(.94)}
 
-  #bar{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);display:flex;
+  #bar{position:absolute;left:50%;bottom:18px;transform:translateX(calc(-50% - 165px));display:flex;
     align-items:center;gap:2px;padding:4px;background:var(--side);border:1px solid var(--line);
     border-radius:9px;box-shadow:0 6px 20px rgb(0 0 0/.4)}
   #bar button{padding:5px 10px;border-radius:6px;color:var(--muted);
     transition:background var(--t-hover) var(--ease),color var(--t-hover) var(--ease),
       transform var(--t-tap) var(--ease-out)}
   #bar button:active{transform:scale(.96)}
+  body.no-side #bar{transform:translateX(-50%)}
   #zoom{min-width:46px;text-align:center;color:var(--muted);font-variant-numeric:tabular-nums}
   #bar .sep{width:1px;height:16px;background:var(--line);margin:0 4px}
   #pages{padding:4px 8px;border-radius:6px;color:var(--muted)}
 
   /* ---- sidebar ---- */
-  #side{width:330px;flex:none;background:var(--side);border-left:1px solid var(--line2);
-    display:flex;flex-direction:column;overflow:hidden}
-  body.no-side #side{display:none}
+  #side{position:absolute;top:0;right:0;bottom:0;width:330px;z-index:5;
+    background:var(--side);border-left:1px solid var(--line2);
+    display:flex;flex-direction:column;overflow:hidden;
+    box-shadow:-1px 0 0 var(--line2), -18px 0 34px rgb(0 0 0/.28);
+    transition:transform 260ms var(--ease-out)}
+  body.no-side #side{transform:translateX(100%)}
+  #topbar{transition:padding-right 260ms var(--ease-out)}
+  body.no-side #topbar{padding-right:14px}
+  #bar{transition:transform 260ms var(--ease-out)}
   #tabs{display:flex;gap:20px;padding:14px 18px 12px;border-bottom:1px solid var(--line2)}
   #tabs button{color:var(--dim);font-size:14px;padding:0;
     transition:color var(--t-hover) var(--ease)}
@@ -112,7 +119,9 @@
   .f .lb{color:var(--muted);flex:none;display:flex;align-items:center;gap:6px}
   .f .lb i{width:5px;height:5px;border-radius:50%;background:#6b8fd4;display:none}
   .f.set .lb i{display:block}
-  .f input{flex:1;text-align:right;font-variant-numeric:tabular-nums}
+  .f input{flex:1;text-align:right;font-variant-numeric:tabular-nums;
+    transition:color 120ms var(--ease)}
+  .f input.bad{color:#e0568c}
   .f .u{color:var(--dim);flex:none}
   .f .sw{width:18px;height:18px;border-radius:5px;border:1px solid var(--line);flex:none;
     padding:0;overflow:hidden}
@@ -149,6 +158,7 @@
   }
   @media (prefers-reduced-motion:reduce){
     *,*::before,*::after{transition-duration:1ms!important;animation-duration:1ms!important}
+    #side,#bar,#topbar{transition:none!important}
     #tools button:active,#bar button:active,#t-save:active,.seg button:active,
     #t-toggle:active,.board-strip .ic button:active{transform:none}
   }
@@ -482,7 +492,7 @@ const hex = (c) => { const m = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/.exec(c 
 const put = (prop, v) => { if (!sel) return; const f = frames.get(sel.file);
   if (f) tellAgent(f, { t: "style", path: sel.path, prop, value: v }); };
 
-function fld({ label, value, unit, prop, set, kind, opts }) {
+function fld({ label, value, unit, prop, set, kind, opts, min, max, step }) {
   const f = document.createElement("div");
   f.className = "f" + (set ? " set" : "");
   const lb = document.createElement("span"); lb.className = "lb";
@@ -500,8 +510,39 @@ function fld({ label, value, unit, prop, set, kind, opts }) {
     s.value = value; s.onchange = () => put(prop, s.value);
     f.append(s);
   } else {
-    const i = document.createElement("input"); i.value = value;
-    i.onchange = () => put(prop, unit ? i.value + (/\D$/.test(i.value) ? "" : unit) : i.value);
+    const i = document.createElement("input");
+    const kw = opts || [];
+    const lo = min === undefined ? -Infinity : min;
+    const hi = max === undefined ? Infinity : max;
+    const dec = step && step < 1;
+    i.value = value; i.spellcheck = false;
+    i.setAttribute("inputmode", dec ? "decimal" : "numeric");
+    i.setAttribute("autocomplete", "off");
+    let last = value;
+
+    const commit = (raw, silent) => {
+      const t = String(raw).trim();
+      if (kw.includes(t)) { last = t; i.value = t; if (!silent) put(prop, t); return true; }
+      if (t === "") { i.value = last; return false; }
+      const n = parseFloat(t.replace(",", "."));
+      if (!isFinite(n)) { i.value = last; i.classList.add("bad");
+        setTimeout(() => i.classList.remove("bad"), 400); return false; }
+      const c = Math.min(hi, Math.max(lo, n));
+      const out = dec ? Math.round(c * 100) / 100 : Math.round(c * 1000) / 1000;
+      last = String(out); i.value = last;
+      if (!silent) put(prop, unit ? out + unit : String(out));
+      return true;
+    };
+    i.onchange = () => commit(i.value);
+    i.onkeydown = (e) => {
+      if (e.key === "Enter") { i.blur(); return; }
+      if (e.key === "Escape") { i.value = last; i.blur(); return; }
+      if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+      e.preventDefault();
+      const base = parseFloat(i.value); if (!isFinite(base)) return;
+      const d = (e.shiftKey ? 10 : e.altKey ? 0.1 : (step || 1)) * (e.key === "ArrowUp" ? 1 : -1);
+      commit(base + d);
+    };
     f.append(i);
     if (unit) { const u = document.createElement("span"); u.className = "u"; u.textContent = unit; f.append(u); }
   }
@@ -557,22 +598,22 @@ function drawProps() {
   ap.append(grp(fld({ label: "Background", value: hex(st.backgroundColor), prop: "backgroundColor",
     kind: "color", set: has("backgroundColor") })));
   ap.append(grp(
-    fld({ label: "Radius", value: px(st.borderRadius), unit: "px", prop: "borderRadius", set: has("borderRadius") }),
+    fld({ label: "Radius", value: px(st.borderRadius), unit: "px", prop: "borderRadius", set: has("borderRadius"), min: 0 }),
     fld({ label: "Overflow", value: st.overflow, prop: "overflow", kind: "select",
       opts: ["visible","hidden","auto","scroll"], set: has("overflow") })));
-  ap.append(grp(fld({ label: "Opacity", value: st.opacity, prop: "opacity", set: has("opacity") })));
+  ap.append(grp(fld({ label: "Opacity", value: st.opacity, prop: "opacity", set: has("opacity"), min: 0, max: 1, step: 0.05 })));
   ap.append(adders(["shadow","text shadow","transform","filter"]));
   propsEl.append(ap);
 
   const tx = section("Text", () => ["color","fontSize","fontWeight","lineHeight","letterSpacing"].forEach(p => put(p, "")));
   tx.append(grp(fld({ label: "Color", value: hex(st.color), prop: "color", kind: "color", set: has("color") })));
   tx.append(grp(
-    fld({ label: "Size", value: px(st.fontSize), unit: "px", prop: "fontSize", set: has("fontSize") }),
+    fld({ label: "Size", value: px(st.fontSize), unit: "px", prop: "fontSize", set: has("fontSize"), min: 1, max: 400 }),
     fld({ label: "Weight", value: st.fontWeight, prop: "fontWeight", kind: "select",
       opts: ["300","400","500","600","700","800"], set: has("fontWeight") })));
   tx.append(grp(
-    fld({ label: "Line", value: px(st.lineHeight), unit: "px", prop: "lineHeight", set: has("lineHeight") }),
-    fld({ label: "Track", value: px(st.letterSpacing), unit: "px", prop: "letterSpacing", set: has("letterSpacing") })));
+    fld({ label: "Line", value: px(st.lineHeight), unit: "px", prop: "lineHeight", set: has("lineHeight"), min: 0, opts: ["normal"] }),
+    fld({ label: "Track", value: px(st.letterSpacing), unit: "px", prop: "letterSpacing", set: has("letterSpacing"), min: -20, max: 40, step: 0.1, opts: ["normal"] })));
   tx.append(seg([["left","Left"],["center","Center"],["right","Right"],["justify","Justify"]],
     st.textAlign, (v) => put("textAlign", v)));
   propsEl.append(tx);
@@ -580,7 +621,8 @@ function drawProps() {
   const sz = section("Sizing", () => ["width","height"].forEach(p => put(p, "")));
   for (const p of ["width", "height"]) {
     const g = grp(fld({ label: p[0].toUpperCase() + p.slice(1), value: px(st[p]), unit: "px",
-      prop: p, set: has(p) }));
+      prop: p, set: has(p), min: 0,
+      opts: ["auto","100%","fit-content","min-content","max-content"] }));
     g.append(seg([["auto","Hug"],["fixed","Fixed"],["100%","Fill"]],
       has(p) ? (st[p] === "auto" ? "auto" : "fixed") : "auto",
       (v) => put(p, v === "fixed" ? st[p] : v)));
@@ -593,9 +635,9 @@ function drawProps() {
   po.append(seg([["static","Inline"],["absolute","Absolute"]], st.position === "static" ? "static" : "absolute",
     (v) => put("position", v)));
   po.append(grp(
-    fld({ label: "Top", value: px(st.top), unit: "px", prop: "top", set: has("top") }),
-    fld({ label: "Left", value: px(st.left), unit: "px", prop: "left", set: has("left") })));
-  po.append(grp(fld({ label: "Z-index", value: st.zIndex, prop: "zIndex", set: has("zIndex") })));
+    fld({ label: "Top", value: px(st.top), unit: "px", prop: "top", set: has("top"), opts: ["auto"] }),
+    fld({ label: "Left", value: px(st.left), unit: "px", prop: "left", set: has("left"), opts: ["auto"] })));
+  po.append(grp(fld({ label: "Z-index", value: st.zIndex, prop: "zIndex", set: has("zIndex"), min: -999, max: 999, opts: ["auto"] })));
   po.append(seg([["absolute","Absolute"],["fixed","Fixed"],["sticky","Sticky"]], st.position,
     (v) => put("position", v)));
   propsEl.append(po);
@@ -617,7 +659,7 @@ function drawProps() {
     (v) => put("justifyContent", v)));
   la.append(seg([["stretch","Stretch"],["flex-start","Start"],["center","Center"],["flex-end","End"]],
     st.alignItems, (v) => put("alignItems", v)));
-  la.append(grp(fld({ label: "Gap", value: px(st.gap), unit: "px", prop: "gap", set: has("gap") })));
+  la.append(grp(fld({ label: "Gap", value: px(st.gap), unit: "px", prop: "gap", set: has("gap"), min: 0, opts: ["normal"] })));
   propsEl.append(la);
 }
 
@@ -682,7 +724,8 @@ function bounds() {
 }
 function fit() {
   const b = bounds(); if (!b) return;
-  const pad = 60, W = viewport.clientWidth - pad*2, H = viewport.clientHeight - pad*2 - 50;
+  const side = document.body.classList.contains("no-side") ? 0 : 330;
+  const pad = 60, W = viewport.clientWidth - side - pad*2, H = viewport.clientHeight - pad*2 - 50;
   view.k = Math.min(2, Math.max(.05, Math.min(W/(b.x2-b.x1), H/(b.y2-b.y1))));
   view.x = pad + (W - (b.x2-b.x1)*view.k)/2 - b.x1*view.k;
   view.y = pad + (H - (b.y2-b.y1)*view.k)/2 - b.y1*view.k;
@@ -802,7 +845,10 @@ async function save() {
 }
 $("#t-save").onclick = save;
 $("#t-toggle").innerHTML = ICON.side;
-$("#t-toggle").onclick = () => document.body.classList.toggle("no-side");
+$("#t-toggle").onclick = () => {
+  document.body.classList.toggle("no-side");
+  if (!touched) setTimeout(fit, 270);   // refit once the slide has landed
+};
 $("#tabs").onclick = (e) => { const b = e.target.closest("button"); if (!b) return;
   $("#tabs").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
   const t = b.dataset.tab;
