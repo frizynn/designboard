@@ -30,6 +30,9 @@
   #viewport.noting{cursor:copy}
   #world{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
   #ink{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
+  #deny{position:fixed;z-index:7;pointer-events:none;opacity:0;display:grid;place-items:center;
+    border:1.5px dashed var(--dim);background:rgb(255 255 255/.05);color:var(--dim);
+    font-size:12px;border-radius:6px;transition:opacity 90ms linear}
 
   .board{position:absolute}
   .board-strip{display:flex;align-items:center;gap:8px;height:26px;color:var(--muted);
@@ -190,6 +193,7 @@
 <div id="app">
   <div id="stage">
     <div id="viewport"><div id="world"><svg id="ink"></svg></div></div>
+    <div id="deny">Drop inside an artboard</div>
     <div id="topbar">
       <span id="doc-title">__CANVAS_TITLE__</span><span class="sp"></span>
       <button id="t-toggle" title="Toggle sidebar"></button>
@@ -316,6 +320,7 @@ addEventListener('message',(e)=>{const m=e.data||{};
   else if(m.t==='serialize'){const c=document.documentElement.cloneNode(true);
     c.querySelectorAll('[data-dc-agent],[data-dc-ui]').forEach(n=>n.remove());
     parent.postMessage({t:'html',id:m.id,html:'<!doct'+'ype html>\\n'+c.outerHTML},'*');}
+  else if(m.t==='ghostoff'){gh.style.opacity='0';}
   else if(m.t==='tool'){tool=m.name;
     const sp=SHAPE[tool];
     if(sp){gh.style.width=sp.w+'px';gh.style.height=sp.h+'px';gh.style.borderRadius=sp.r;
@@ -337,6 +342,7 @@ addEventListener('message',(e)=>{const m=e.data||{};
     parent.postMessage({t:'varset',name:m.name,value:m.value},'*');}
   else if(m.t==='deselect'){box.style.opacity='0';grip(false);cur=null;}});
 addEventListener('mousemove',(e)=>{if(!on||!SHAPE[tool]){gh.style.opacity='0';return;}
+  parent.postMessage({t:'over'},'*');
   const sp=SHAPE[tool];
   gh.style.left=(e.clientX+scrollX-sp.w/2)+'px';gh.style.top=(e.clientY+scrollY-sp.h/2)+'px';
   gh.style.opacity='1';},true);
@@ -350,8 +356,14 @@ addEventListener('click',(e)=>{if(!on)return;e.preventDefault();e.stopPropagatio
     if(tool==='text'){n.textContent='Text';n.setAttribute('style','font-size:16px;color:#111');}
     else if(tool==='rect'){n.setAttribute('style','width:160px;height:90px;background:#d9d4cc;border-radius:8px');}
     else if(tool==='ellipse'){n.setAttribute('style','width:120px;height:120px;background:#d9d4cc;border-radius:50%');}
-    const host=t.children.length||t===document.body?t:t.parentNode;host.append(n);t=n;}
+    if(t===document.body||t===document.documentElement){t.append(n);}
+    else if(t.children.length){t.append(n);}
+    else{t.parentNode.insertBefore(n,t.nextSibling);}   // sibling of what you clicked
+    t=n;}
   cur=t;place(box,cur,3);hov.style.opacity='0';parent.postMessage({t:'sel',...info(cur)},'*');},true);
+addEventListener('wheel',(e)=>{e.preventDefault();
+  parent.postMessage({t:'wheel',dx:e.deltaX,dy:e.deltaY,ctrl:e.ctrlKey||e.metaKey},'*');},
+  {passive:false,capture:true});
 addEventListener('scroll',()=>{if(cur)place(box,cur,3);},true);
 })();` + "</scr" + "ipt>";
 
@@ -426,6 +438,7 @@ const HINT = {
   pen: "Drag on the canvas to draw freehand",
 };
 function setMode(m) {
+  if (m === "frame") { addArtboard(); return; }   // one-shot action, not a mode
   mode = m;
   toolsEl.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.tool === m));
   viewport.classList.toggle("pen", m === "pen" || m === "arrow");
@@ -438,7 +451,6 @@ function setMode(m) {
     tellAgent(f, { t: "mode", on: inFrame });
     tellAgent(f, { t: "tool", name: m === "select" ? null : m });
   }
-  if (m === "frame") addArtboard();
 }
 addEventListener("keydown", (e) => {
   if (e.target.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
@@ -452,11 +464,43 @@ addEventListener("keydown", (e) => {
 });
 
 /* ---- canvas render -------------------------------------------------------- */
+const shown = new Map();     // file -> { el, src }
 function render() {
-  world.querySelectorAll(".board, .note").forEach(n => n.remove());
-  frames.clear(); _openSig = null;
-  for (const b of boards) {
-    if (!onPage(b) || files[b.file] === undefined) continue;
+  const want = new Map();
+  for (const b of boards) if (onPage(b) && files[b.file] !== undefined) want.set(b.file, b);
+
+  for (const [file, rec] of [...shown]) {
+    if (want.has(file)) continue;
+    rec.el.remove(); shown.delete(file); frames.delete(file); _openSig = null;
+  }
+  for (const [file, b] of want) {
+    const rec = shown.get(file);
+    if (rec) {                                   // reuse: never reload a live iframe
+      rec.el.style.left = (b.x || 0) + "px";
+      rec.el.style.top = ((b.y || 0) - 26) + "px";
+      rec.el.style.width = (b.w || 800) + "px";
+      rec.el.querySelector(".board-frame").style.height = (b.h || 600) + "px";
+      rec.el.querySelector(".nm").textContent = b.title || file.replace(/\.html$/i, "");
+      if (rec.src !== files[file]) {
+        rec.src = files[file];
+        rec.el.querySelector("iframe").srcdoc = resolve(files[file]);
+      }
+      continue;
+    }
+    world.append(makeBoard(b)); _openSig = null;
+  }
+  world.querySelectorAll(".note").forEach(n => n.remove());
+  for (const n of notes) {
+    if (!onPage(n)) continue;
+    const el = document.createElement("div");
+    el.className = "note"; el.dataset.id = n.id;
+    el.style.cssText = `left:${n.x||0}px;top:${n.y||0}px;width:${n.w||240}px`;
+    el.textContent = n.text || ""; wireNote(el, n); world.append(el);
+  }
+  apply();
+}
+function makeBoard(b) {
+  {
     const el = document.createElement("div");
     el.className = "board"; el.dataset.file = b.file;
     el.style.cssText = `left:${b.x||0}px;top:${(b.y||0)-26}px;width:${b.w||800}px`;
@@ -483,16 +527,9 @@ function render() {
     frames.set(b.file, f); frame.append(f);
     el.append(strip, frame);
     strip.addEventListener("pointerdown", (ev) => { ev.stopPropagation(); selectBoard(b.file); });
-    world.append(el);
+    shown.set(b.file, { el, src: files[b.file] });
+    return el;
   }
-  for (const n of notes) {
-    if (!onPage(n)) continue;
-    const el = document.createElement("div");
-    el.className = "note"; el.style.cssText =
-      `left:${n.x||0}px;top:${n.y||0}px;width:${n.w||240}px`;
-    el.textContent = n.text || ""; wireNote(el, n); world.append(el);
-  }
-  apply();
 }
 const apply = () => {
   world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.k})`;
@@ -833,6 +870,11 @@ addEventListener("message", (e) => {
     let key = file; open.add(key);
     for (let i = 1; i < m.path.length; i++) open.add(file + ":" + m.path.slice(0, i).join("."));
     drawTree(); drawProps();
+  } else if (m.t === "wheel") {
+    wheel(m.dx, m.dy, m.ctrl, innerWidth / 2, innerHeight / 2);
+  } else if (m.t === "over" && file) {
+    denyEl.style.opacity = "0";
+    for (const [k, fr] of frames) if (k !== file) tellAgent(fr, { t: "ghostoff" });
   } else if (m.t === "resized" && file) {
     record({ kind: "size", file, path: m.path, pw: m.pw, ph: m.ph, w: m.w, h: m.h });
   } else if (m.t === "src" || m.t === "vars") {
@@ -843,6 +885,25 @@ addEventListener("message", (e) => {
     const r = pend.get(m.id); if (r) { pend.delete(m.id); r(m.tree !== undefined ? m.tree : m.html); }
   }
 });
+
+/* ---- placement affordance ------------------------------------------------- */
+const INSERT = ["text", "rect", "ellipse"];
+const denyEl = $("#deny");
+const SHAPE_W = { text: 90, rect: 160, ellipse: 120 }, SHAPE_H = { text: 24, rect: 90, ellipse: 120 };
+let overBoard = 0;
+function denyAt(e) {
+  if (!INSERT.includes(mode)) { denyEl.style.opacity = "0"; return; }
+  const t = e.target;
+  if (t && t.closest && t.closest(".board-frame")) { denyEl.style.opacity = "0"; return; }
+  const w = SHAPE_W[mode] * view.k, h = SHAPE_H[mode] * view.k;
+  denyEl.style.width = w + "px"; denyEl.style.height = h + "px";
+  denyEl.style.left = (e.clientX - w / 2) + "px"; denyEl.style.top = (e.clientY - h / 2) + "px";
+  denyEl.style.borderRadius = mode === "ellipse" ? "50%" : "6px";
+  denyEl.textContent = w > 120 ? "Drop inside an artboard" : "";
+  denyEl.style.opacity = "1";
+}
+addEventListener("pointermove", denyAt);
+addEventListener("pointerleave", () => { denyEl.style.opacity = "0"; });
 
 /* ---- pan / zoom ----------------------------------------------------------- */
 let drag = null, stroke = null, strokeEl = null;
@@ -871,12 +932,20 @@ const endDrag = () => { if (stroke) commitCanvas("ink");
   drag = null; stroke = null; strokeEl = null; viewport.classList.remove("panning"); };
 viewport.addEventListener("pointerup", endDrag);
 viewport.addEventListener("pointercancel", endDrag);
-viewport.addEventListener("wheel", (e) => {
-  e.preventDefault(); touched = true;
-  const k = Math.min(4, Math.max(.05, view.k * Math.exp(-e.deltaY * ((e.ctrlKey || e.metaKey) ? .01 : .0025))));
-  view.x = e.clientX - (e.clientX - view.x) * (k / view.k);
-  view.y = e.clientY - (e.clientY - view.y) * (k / view.k);
+function zoomAt(cx, cy, dy) {
+  const k = Math.min(4, Math.max(.05, view.k * Math.exp(-dy * .01)));
+  view.x = cx - (cx - view.x) * (k / view.k);
+  view.y = cy - (cy - view.y) * (k / view.k);
   view.k = k; apply();
+}
+function wheel(dx, dy, ctrl, cx, cy) {
+  touched = true;
+  if (ctrl) return zoomAt(cx, cy, dy);          // pinch, or ctrl/cmd + wheel
+  view.x -= dx; view.y -= dy; apply();          // two fingers pans, like every canvas tool
+}
+viewport.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  wheel(e.deltaX, e.deltaY, e.ctrlKey || e.metaKey, e.clientX, e.clientY);
 }, { passive: false });
 
 function bounds() {
@@ -962,7 +1031,7 @@ function addArtboard() {
   mark();
   boards.push({ file: name, x: b ? b.x2 + 80 : 0, y: b ? b.y1 + 26 : 0, w: 800, h: 600,
     ...(pages.length ? { page } : {}) });
-  render(); commitCanvas("artboard"); setMode("select");
+  render(); commitCanvas("artboard"); setMode("select"); drawTree();
 }
 function dl(file) {
   const blob = new Blob([files[file]], { type: "text/html" });

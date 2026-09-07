@@ -124,6 +124,16 @@ The chrome follows a small motion contract; keep it if you touch the template.
   broken even when it worked.
 - **Hover lives behind `@media (hover:hover) and (pointer:fine)`** so touch never strands a hover
   state, and everything collapses under `prefers-reduced-motion: reduce`.
+- **Two fingers pan, pinch zooms.** A plain wheel translates the canvas; `ctrl`/`cmd` + wheel
+  scales it. Artboard iframes swallow wheel events, so the injected agent intercepts them and
+  forwards the deltas to the host - otherwise the canvas freezes whenever the cursor is over a
+  design.
+- **`render()` is a diff, never a rebuild.** Boards are reused by filename and only get a new
+  `srcdoc` when their source actually changed. Re-seeding every iframe on each change looked like
+  the page reloading, and threw away scroll position, selection and agent state.
+- **Insert tools show where they will land.** Inside an artboard the agent draws a rose ghost of
+  the shape at the cursor; outside one the host draws a grey "Drop inside an artboard" ghost. Only
+  the artboard under the cursor shows its ghost - the others are told to hide.
 - **The sidebar slides on `transform`, never on width.** It is absolutely positioned over the
   stage precisely so the toggle costs no layout: the stage holds live iframes, and reflowing them
   every frame would drop the animation. `fit()` subtracts the sidebar width when it is open.
