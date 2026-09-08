@@ -1,3 +1,5 @@
+![Designboard — a portable visual canvas for coding agents](.github/assets/designboard-banner.png)
+
 # Designboard
 
 **A portable design canvas your coding agent can author.**
@@ -61,7 +63,7 @@ it into the host page, and a text layer that reads like an instruction is copy, 
 ## Install as a skill
 
 ```bash
-git clone https://github.com/YOUR-USER/designboard
+git clone https://github.com/frizynn/designboard
 ln -s "$PWD/designboard" ~/.claude/skills/designboard     # Claude Code
 ln -s "$PWD/designboard" ~/.codex/skills/designboard      # Codex
 ```
