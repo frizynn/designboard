@@ -3,6 +3,15 @@
   "version": "0.1.0",
   "description": "A portable design canvas your coding agent can author: HTML artboards on one pan/zoom canvas, edited in place, saved as a single file.",
   "license": "MIT",
+  "author": "Juan Francisco Lebrero",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/frizynn/designboard.git"
+  },
+  "homepage": "https://github.com/frizynn/designboard#readme",
+  "bugs": {
+    "url": "https://github.com/frizynn/designboard/issues"
+  },
   "type": "module",
   "bin": { "designboard": "./assets/seed.mjs" },
   "files": ["assets", "references", "SKILL.md", "README.md", "LICENSE"],

@@ -1,89 +1,163 @@
-![Designboard — a portable visual canvas for coding agents](.github/assets/designboard-banner.png)
+![Designboard, a portable visual canvas for coding agents](.github/assets/designboard-banner.png)
 
 # Designboard
 
-**A portable design canvas your coding agent can author.**
+[![CI](https://github.com/frizynn/designboard/actions/workflows/ci.yml/badge.svg)](https://github.com/frizynn/designboard/actions/workflows/ci.yml)
+[![GitHub release](https://img.shields.io/github/v/release/frizynn/designboard?color=111111)](https://github.com/frizynn/designboard/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-111111.svg)](LICENSE)
 
-Designboard turns plain HTML files into artboards on one pan/zoom canvas, and gives you a real
-editor on top of them: click an element, change its type and spacing, drag its corners, drop a
-note, draw on the canvas, undo it all. The output is **one HTML file**. No service, no account,
-no network, no build step.
+**A portable visual canvas for coding agents.**
 
-It ships as an [Agent Skill](https://code.claude.com/docs/en/skills) — Claude Code, Cursor, Codex
-and anything else that reads `SKILL.md` — so an agent can draft the artboards and hand you back
-something you tweak by hand instead of by prompt.
+Designboard lets an AI agent draft real HTML artboards and hand them back on an editable,
+pan-and-zoom canvas. Refine text, color, spacing, layout, and source directly in the browser, then
+save the entire design as one portable HTML file.
+
+No hosted service. No account. No build step. No lock-in.
+
+## Install
+
+Install Designboard as an [Agent Skill](https://agentskills.io):
+
+```bash
+npx skills add frizynn/designboard
+```
+
+The installer detects supported coding agents and lets you choose where to install the skill.
+Designboard follows the open [`SKILL.md` specification](https://agentskills.io/specification), so
+it works with compatible clients such as Codex, Claude Code, Cursor, and others.
+
+<details>
+<summary>Manual installation</summary>
+
+```bash
+git clone https://github.com/frizynn/designboard
+ln -s "$PWD/designboard" ~/.codex/skills/designboard
+ln -s "$PWD/designboard" ~/.claude/skills/designboard
+```
+
+</details>
+
+## Use it
+
+Ask your coding agent for a visual design. For example:
+
+```text
+Use Designboard to draft a responsive pricing page that matches this repository's design system.
+Include desktop and mobile artboards.
+```
+
+The agent inspects the current product, authors one or more HTML artboards, and returns a single
+canvas file. Open that file in any modern browser to review and edit the result.
+
+## Why Designboard
+
+Most agent-generated mockups end as screenshots, throwaway code, or another hosted project.
+Designboard uses plain HTML as both the source and the handoff:
+
+- **Agent-native:** the skill teaches compatible coding agents how to inspect an existing design
+  system and produce editable artboards.
+- **Visually editable:** select elements, adjust styles and layout, edit source, add notes, draw,
+  resize frames, and undo changes.
+- **Portable:** the canvas, artboards, images, notes, and editor travel in one HTML file.
+- **Local-first:** Designboard itself does not require a server, account, telemetry, or network
+  connection.
+- **Inspectable:** the artifact remains HTML and CSS rather than a proprietary document format.
+
+Remote assets referenced by an artboard, such as Google Fonts, still require their original
+network connection. Embed assets when the final canvas must work fully offline.
+
+## What is included
+
+| Area | Capabilities |
+|---|---|
+| Canvas | Infinite pan and zoom, fit-to-view, pages, focus mode, notes, freehand ink, and arrows |
+| Editor | Element selection, resize handles, a semantic layer tree, and inline property controls |
+| Code | Live editing of each artboard's real HTML source |
+| Tweaks | Editing for CSS custom properties exposed by the artboard |
+| History | Up to 200 undo and redo steps for visual and source changes |
+| Present | Full-window presentation of one artboard at a time |
+| Export | Save as a portable HTML file or export through the browser's PDF pipeline |
+
+## Build a canvas directly
+
+Designboard can also be used without an agent. Create a self-contained `Main.html`, then run:
 
 ```bash
 node assets/seed.mjs \
   --template assets/canvas.template.html \
-  --out spring-menu.html --title "Spring Menu" \
-  --artboard Main.html --artboard Pricing.html \
-  --image hero.png --canvas canvas.json
+  --out spring-menu.html \
+  --title "Spring Menu" \
+  --artboard Main.html
 ```
 
-Open `spring-menu.html` in any browser. That is the whole product.
-
-## What you get
-
-|  | |
-|---|---|
-| **Canvas** | Infinite pan/zoom, fit-to-view, named pages, focus mode, sticky notes, freehand ink and arrows |
-| **Editor** | Click-to-select with a dashed hover outline, corner handles that resize, a layer tree that names containers `Row` / `Column` / `Grid` the way a design tool does |
-| **Properties** | Appearance, Text, Sizing, Position and Contents layout — every numeric field clamped and validated, arrow keys nudge |
-| **Code** | The artboard's real source, editable, applied live |
-| **Tweaks** | The CSS custom properties the artboard declares, edited as design tokens |
-| **History** | Undo/redo over styles, text, resize, notes, ink and artboards |
-| **Export** | Save writes an updated single-file canvas; Export PDF goes through the browser |
-
-## The artboard format
-
-An artboard is a plain, self-contained HTML file. No framework, no imports, no build.
-
-```html
-<!doctype html>
-<meta charset="utf-8">
-<style>body { margin: 0; font-family: "Söhne", system-ui, sans-serif }</style>
-<div style="display: flex; flex-direction: column; gap: 24px; padding: 48px">
-  <h1 style="margin: 0; font-size: 44px">Spring menu</h1>
-</div>
-```
-
-`canvas.json` places them, names pages, and carries notes. Full spec in
-[`references/canvas-format.md`](references/canvas-format.md).
-
-## Security model
-
-Each artboard renders in its own `sandbox="allow-scripts"` iframe with **no** `allow-same-origin`,
-so it runs on an opaque origin the host page cannot read into. Selection, styling and
-serialisation all travel over `postMessage` to a small agent injected into the artboard.
-
-Artboard content is untrusted by design — it may have been written by someone else. Nothing lifts
-it into the host page, and a text layer that reads like an instruction is copy, not a command.
-
-## Install as a skill
+For multiple artboards, pass `--artboard` more than once. Use `canvas.json` to control placement,
+pages, notes, and the initial view:
 
 ```bash
-git clone https://github.com/frizynn/designboard
-ln -s "$PWD/designboard" ~/.claude/skills/designboard     # Claude Code
-ln -s "$PWD/designboard" ~/.codex/skills/designboard      # Codex
+node assets/seed.mjs \
+  --template assets/canvas.template.html \
+  --out spring-menu.html \
+  --title "Spring Menu" \
+  --artboard Main.html \
+  --artboard Pricing.html \
+  --image hero.png \
+  --canvas canvas.json
 ```
 
-## Tests
+Validate or extract a canvas with:
 
 ```bash
-npm test
+node assets/seed.mjs --check spring-menu.html
+node assets/seed.mjs --extract spring-menu.html --to extracted-canvas
 ```
 
-Fourteen checks over the seeder: round-trip fidelity, adversarial content, every input guard, and
-the HTML-parser safety rule described in [CONTRIBUTING.md](CONTRIBUTING.md). Node 18+, no browser.
+See the [canvas format reference](references/canvas-format.md) for the complete schema.
 
-## Known limits
+## How it works
 
-- One element at a time. No multi-select, no drag-to-move.
-- Undo is 200 steps and does not span a reload.
-- Export PDF uses the browser's print pipeline; there is no per-artboard PNG.
-- Webfonts load from Google Fonts by `<link>`; anything else must be a `@font-face` data: URI.
+```text
+HTML artboards + optional images + canvas.json
+                    |
+                    v
+               assets/seed.mjs
+                    |
+                    v
+       one self-contained editable HTML file
+```
+
+Each artboard runs inside a sandboxed iframe. A small injected editing agent communicates with the
+host through `postMessage`; the host never receives same-origin access to artboard content. Saving
+serializes the edited artboards back into the portable file, while extraction restores their
+individual source files.
+
+## Security
+
+Artboard content is treated as untrusted. Each artboard runs in a `sandbox="allow-scripts"` iframe
+without `allow-same-origin`, and its contents are never treated as agent instructions.
+
+See [SECURITY.md](SECURITY.md) for supported versions and private vulnerability reporting.
+
+## Requirements
+
+- Node.js 18 or newer for seeding, checking, and extracting canvases
+- A modern browser for viewing and editing
+- A compatible coding agent only when using Designboard as a skill
+
+## Current limitations
+
+- One element can be selected at a time.
+- Elements cannot yet be dragged to move them.
+- Undo history does not survive a page reload.
+- PDF export uses the browser's print pipeline.
+- Per-artboard PNG export is not yet available.
+
+## Contributing
+
+Issues and pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before changing the
+canvas runtime, especially its iframe isolation and HTML parser safeguards.
+
+Published changes are tracked in the [changelog](CHANGELOG.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Designboard is available under the [MIT License](LICENSE).

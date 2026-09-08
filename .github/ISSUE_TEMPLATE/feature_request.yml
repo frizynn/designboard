@@ -1,0 +1,39 @@
+name: Feature request
+description: Propose a focused improvement to Designboard
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What workflow is difficult today, and for whom?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Describe the smallest useful change that would solve the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds or other approaches did you try?
+  - type: textarea
+    id: portability
+    attributes:
+      label: Portability impact
+      description: Does this add a dependency, service, account, network requirement, or file-format change?
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues for similar proposals.
+          required: true
+        - label: This request describes a user problem, not only an implementation preference.
+          required: true
