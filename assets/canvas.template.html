@@ -40,13 +40,16 @@
   #t-save:disabled{opacity:.6}
 
   #stage{position:absolute;top:var(--head-h);left:0;right:0;bottom:0;overflow:hidden}
-  #viewport{position:absolute;inset:0;overflow:hidden;cursor:default}
+  /* The viewport is a real scroller: two-finger pan is the browser's own threaded scrolling. */
+  #viewport{position:absolute;inset:0;overflow:scroll;overscroll-behavior:none;overflow-anchor:none;scrollbar-width:none;
+    cursor:default}
+  #viewport::-webkit-scrollbar{display:none}
+  #space{position:relative}
   #viewport.panning,#viewport.hand.panning{cursor:grabbing}
   #viewport.hand{cursor:grab}
   #viewport.pen{cursor:crosshair}
   #viewport.noting{cursor:copy}
   #world{position:absolute;top:0;left:0;transform-origin:0 0;--k:1;--inv:1}
-  #world.moving{will-change:transform}
   #ink{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
   #deny{position:fixed;z-index:7;pointer-events:none;opacity:0;display:grid;place-items:center;
     border:1.5px dashed var(--dim);background:rgb(255 255 255/.05);color:var(--dim);
@@ -251,7 +254,7 @@
     <button id="t-save" class="edit-only" aria-haspopup="menu"><span>Save</span></button>
   </header>
   <div id="stage">
-    <div id="viewport"><div id="world"><svg id="ink"></svg></div></div>
+    <div id="viewport"><div id="space"><div id="world"><svg id="ink"></svg></div></div></div>
     <div id="deny">Drop inside an artboard</div>
     <div id="toolbar" class="pill">
       <button id="page-btn" class="txt" aria-haspopup="menu"></button>
@@ -659,7 +662,7 @@ function render() {
     el.textContent = n.text || ""; wireNote(el, n); world.append(el);
   }
   world.querySelectorAll(".board").forEach(n => n.classList.toggle("selected", n.dataset.file === boardSel && !sel));
-  apply();
+  markLayout();
 }
 function placeBoard(el, b) {
   el.style.left = (b.x || 0) + "px"; el.style.top = (b.y || 0) + "px";
@@ -722,22 +725,45 @@ function wireStrip(strip, cur) {   // the name strip selects the artboard and dr
   strip.addEventListener("pointerup", end); strip.addEventListener("pointercancel", end);
   strip.addEventListener("dblclick", (ev) => { ev.stopPropagation(); focusOn(cur()); });
 }
-// A trackpad sends several wheel events per frame: they only move `view`, and one write per frame
-// paints it. The zoom-dependent variables and label change only when the zoom does, and the world
-// is a promoted layer only while it moves, so it re-rasters crisp once it settles.
-let _raf = 0, _k = null, _settle = 0;
+// Panning is native scrolling: #viewport scrolls #space on the compositor thread with the
+// platform's momentum, so it never waits on this page's JavaScript. `view` (screen px of the world
+// origin, and zoom) follows the scroll position. Zoom and programmatic moves go through
+// paintView once per frame: it sizes #space to the content plus one viewport of slack on every
+// side (and always enough to hold the current view), scales the world, and scrolls to the view.
+let _raf = 0, _k = null, _dirty = true, ox = 0, oy = 0, _set = null;
+const space = $("#space");
 const apply = () => { if (!_raf) _raf = requestAnimationFrame(paintView); };
+const markLayout = () => { _dirty = true; apply(); };
 function paintView() {
   _raf = 0;
-  world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.k})`;
-  if (view.k !== _k) {
-    _k = view.k;
-    world.style.setProperty("--k", view.k); world.style.setProperty("--inv", 1 / view.k);
-    $("#zoom-btn").innerHTML = Math.round(view.k * 100) + "%" + ICON.chevd;
+  const v = vpRect(), k = view.k;
+  const b = bounds() || { x1: 0, y1: 0, x2: 0, y2: 0 };
+  const L = Math.min(b.x1 * k - v.width, -view.x), R = Math.max(b.x2 * k + v.width, -view.x + v.width);
+  const T = Math.min(b.y1 * k - v.height, -view.y), B = Math.max(b.y2 * k + v.height, -view.y + v.height);
+  if (_dirty || k !== _k || -L !== ox || -T !== oy) {
+    _dirty = false; ox = -L; oy = -T;
+    space.style.width = (R - L) + "px"; space.style.height = (B - T) + "px";
+    world.style.transform = `scale(${k})`;
   }
-  world.classList.add("moving"); clearTimeout(_settle);
-  _settle = setTimeout(() => world.classList.remove("moving"), 160);
+  const sl = ox - view.x, st = oy - view.y;
+  viewport.scrollLeft = sl; viewport.scrollTop = st;
+  _set = [viewport.scrollLeft, viewport.scrollTop];
+  // the scroller snaps to device pixels: keep the sub-pixel remainder in the world offset
+  const fx = sl - _set[0], fy = st - _set[1];
+  world.style.left = (ox - fx) + "px"; world.style.top = (oy - fy) + "px";
+  view.x = ox - fx - _set[0]; view.y = oy - fy - _set[1];
+  if (k !== _k) {
+    _k = k;
+    world.style.setProperty("--k", k); world.style.setProperty("--inv", 1 / k);
+    $("#zoom-btn").innerHTML = Math.round(k * 100) + "%" + ICON.chevd;
+  }
 }
+viewport.addEventListener("scroll", () => {
+  const x = viewport.scrollLeft, y = viewport.scrollTop;
+  if (_set && x === _set[0] && y === _set[1]) return;   // our own scroll from paintView
+  const lx = parseFloat(world.style.left) || 0, ly = parseFloat(world.style.top) || 0;
+  view.x = lx - x; view.y = ly - y; touched = true; _set = null;
+}, { passive: true });
 
 /* ---- layer tree ----------------------------------------------------------- */
 const pend = new Map(); let seq = 0;
@@ -1167,7 +1193,7 @@ addEventListener("pointerleave", () => { denyEl.style.opacity = "0"; });
 /* ---- pan / zoom ----------------------------------------------------------- */
 let drag = null, stroke = null, strokeEl = null, _vp = null;
 const vpRect = () => _vp || (_vp = viewport.getBoundingClientRect());
-addEventListener("resize", () => { _vp = null; });
+addEventListener("resize", () => { _vp = null; markLayout(); });
 const local = (e) => { const r = vpRect(); return [e.clientX - r.left, e.clientY - r.top]; };
 const wpt = (e) => { const [x, y] = local(e); return [Math.round((x - view.x) / view.k), Math.round((y - view.y) / view.k)]; };
 // Pointer positions in an artboard's own CSS px, through its on-screen scale.
@@ -1238,11 +1264,9 @@ function zoomTo(k, cx, cy) {
 const zoomBy = (f, cx, cy) => zoomTo(view.k * f, cx, cy);
 // Lines and pages arrive from some mice; trackpads send pixels. One notch of a ctrl+wheel mouse
 // is clamped so it zooms a step instead of jumping several.
-function wheel(dx, dy, dmode, ctrl, cx, cy) {
-  const unit = dmode === 1 ? 16 : dmode === 2 ? vpRect().height : 1;
-  dx *= unit; dy *= unit;
-  if (ctrl) return zoomBy(Math.exp(-Math.max(-24, Math.min(24, dy)) * 0.01), cx, cy);
-  touched = true; view.x -= dx; view.y -= dy; apply();          // two fingers pan
+function zoomWheel(dy, dmode, cx, cy) {
+  dy *= dmode === 1 ? 16 : dmode === 2 ? vpRect().height : 1;
+  zoomBy(Math.exp(-Math.max(-24, Math.min(24, dy)) * 0.01), cx, cy);
 }
 let g0 = 1;
 function gesture(phase, scale, cx, cy) {   // Safari pinch
@@ -1250,20 +1274,18 @@ function gesture(phase, scale, cx, cy) {   // Safari pinch
   else if (phase === "gesturechange") zoomTo(g0 * scale, cx, cy);
 }
 // Capture on window so a pinch over the header, a toolbar or the panel still never zooms the page.
-// Artboard iframes take no pointer input, so every wheel and pinch over the canvas lands here,
-// in this process, whatever the browser does with cross-process frames.
+// Artboard iframes take no pointer input, so every pinch over the canvas lands here, in this
+// process, whatever the browser does with cross-process frames. A plain wheel is left alone: it
+// scrolls #viewport natively, and since it is never cancelled only the first event of each
+// gesture waits for this listener.
 addEventListener("wheel", (e) => {
+  if (!(e.ctrlKey || e.metaKey)) return;
+  e.preventDefault();
+  if (isFocus() || isPresent()) return;
   const overCanvas = !!(e.target.closest && e.target.closest("#viewport"));
-  if (e.ctrlKey || e.metaKey) {
-    e.preventDefault();
-    if (isFocus() || isPresent()) return;
-    const v = vpRect();
-    const [cx, cy] = overCanvas ? local(e) : [v.width / 2, v.height / 2];
-    wheel(0, e.deltaY, e.deltaMode, true, cx, cy);
-  } else if (overCanvas) {
-    e.preventDefault();
-    wheel(e.deltaX, e.deltaY, e.deltaMode, false);
-  }
+  const v = vpRect();
+  const [cx, cy] = overCanvas ? local(e) : [v.width / 2, v.height / 2];
+  zoomWheel(e.deltaY, e.deltaMode, cx, cy);
 }, { passive: false, capture: true });
 for (const g of ["gesturestart", "gesturechange", "gestureend"])
   addEventListener(g, (e) => { e.preventDefault();

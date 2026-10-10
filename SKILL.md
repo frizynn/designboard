@@ -140,14 +140,25 @@ The chrome follows a small motion contract; keep it if you touch the template.
   gesture. Bundled headless Chromium keeps those frames in process and hides both bugs, so test
   input in the user's real browser engine, through `Input.synthesizePinchGesture` and
   `Input.synthesizeScrollGesture`, not plain wheel events.
-- **Two fingers pan, pinch zooms at the cursor, one paint per frame.** A plain wheel translates the
-  canvas; `ctrl`/`cmd` + wheel scales it around the cursor by `exp(-deltaY / 100)`, which tracks a
-  trackpad pinch 1:1. The host listens on `window` in the capture phase and cancels every `ctrl` +
-  wheel and Safari `gesture*` event, so a pinch over the header, a toolbar or the panel never zooms
-  the browser page. Wheel events only update the view; one `requestAnimationFrame` writes the
-  transform, the zoom label and `--k`/`--inv` change only with the zoom, and `will-change` is on
-  only while the canvas moves so it re-rasters crisp when it stops. Interactive artboards are
-  used through Play, where their iframe does take input.
+- **Two-finger pan is native scrolling.** `#viewport` is a real scroller (`overflow: scroll`,
+  hidden scrollbars, `overscroll-behavior: none` so a horizontal swipe never navigates back,
+  `overflow-anchor: none`) over `#space`, which holds the scaled `#world`. The browser scrolls it
+  on the compositor thread with the platform's momentum, so a pan never waits on this page's
+  JavaScript. `view` follows the scroll position in a passive `scroll` listener. Measured on a real
+  20-artboard canvas in Helium: pan latency p95 went from 36-46 ms to 18 ms, and with a busy main
+  thread from 59-65 ms with 10% dropped frames to 18 ms with none. Never cancel a plain wheel
+  event again; the window wheel listener only cancels `ctrl`/`cmd` + wheel.
+- **Zoom goes through one paint per frame.** `ctrl`/`cmd` + wheel scales around the cursor by
+  `exp(-deltaY / 100)`, which tracks a trackpad pinch 1:1; Safari pinch arrives as `gesture*`. The
+  listener is on `window` in the capture phase, so a pinch over the header, a toolbar or the panel
+  never zooms the browser page. `paintView` (one `requestAnimationFrame`) sizes `#space` to the
+  content plus one viewport of slack on every side, scales the world, scrolls to the view and keeps
+  the sub-pixel remainder in the world offset so the anchor never jitters. `--k`/`--inv` and the
+  zoom label change only with the zoom. Interactive artboards are used through Play.
+- **Measure smoothness in the user's browser engine.** Trace Chromium's own frame pipeline
+  (`PipelineReporter`, `InputLatency::*`) while `Input.synthesizeScrollGesture` and
+  `Input.synthesizePinchGesture` run over artboards that cover the screen; frames over empty canvas
+  report as dropped because nothing changed, which looks like jank and is not.
 - **`render()` is a diff, never a rebuild.** Boards are reused by filename and only get a new
   `srcdoc` when their source actually changed. Re-seeding every iframe on each change looked like
   the page reloading, and threw away scroll position, selection and agent state.
@@ -299,6 +310,7 @@ These are the paths that actually get hot; keep them that way.
 - Undo/redo (200 steps) covers style, text and source edits, notes, ink, artboards and pages.
 - Export PDF goes through the browser's print dialog. There is no per-artboard PNG export.
 - Elements inside an artboard cannot be dragged or deleted from the canvas yet; use Code.
+- Panning stops one viewport past the content on each side; the canvas is not infinite.
 - Inserting a text, rectangle or ellipse is not an undo step, and it shifts the position-based
   paths of later siblings, so undoing an edit made before the insert can hit the wrong element.
 
