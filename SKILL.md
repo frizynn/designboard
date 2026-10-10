@@ -84,7 +84,13 @@ and never hold the handover for it.
 
 ### 4. Hand it over
 
-Give the path and one or two plain sentences: what you drafted, what you assumed, what is a
+Always include the complete, copyable URL to the finished canvas in the handover. For a local
+file, use its absolute `file:///` URL and percent-encode spaces and other reserved characters.
+Show the full URL visibly, not only a filename, relative path, or descriptive link label. A
+clickable absolute file link may be added, but does not replace the complete URL. For a hosted
+canvas, use its actual complete HTTPS URL; never invent one.
+
+Add one or two plain sentences: what you drafted, what you assumed, what is a
 placeholder worth their double-checking. Do not explain how to pan, zoom, or export - the canvas
 explains itself. Save that for when they ask.
 

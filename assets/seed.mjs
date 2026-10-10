@@ -144,7 +144,7 @@ const state = JSON.stringify({ title: opt.title, mode: opt.mode || "edit", files
 
 let tpl = readFileSync(opt.template, "utf8");
 if (!tpl.includes("__CANVAS_STATE__")) die("template has no __CANVAS_STATE__ placeholder");
-tpl = tpl.split("__CANVAS_TITLE__").join(escapeHtml(opt.title)).replace("__CANVAS_STATE__", state);
+tpl = tpl.split("__CANVAS_TITLE__").join(escapeHtml(opt.title)).replace("__CANVAS_STATE__", () => state); // function form: a literal "$&" in an artboard must not expand
 writeFileSync(opt.out, tpl);
 
 const kb = Math.round(Buffer.byteLength(tpl) / 1024);
