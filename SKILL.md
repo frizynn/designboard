@@ -289,6 +289,8 @@ These are the paths that actually get hot; keep them that way.
 - Undo/redo (200 steps) covers style, text and source edits, notes, ink, artboards and pages.
 - Export PDF goes through the browser's print dialog. There is no per-artboard PNG export.
 - Elements inside an artboard cannot be dragged or deleted from the canvas yet; use Code.
+- Inserting a text, rectangle or ellipse is not an undo step, and it shifts the position-based
+  paths of later siblings, so undoing an edit made before the insert can hit the wrong element.
 
 - Webfonts load from Google Fonts by `<link>`. Anything else must be a `@font-face` data: URI
   inside the artboard.

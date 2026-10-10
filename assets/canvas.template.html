@@ -379,10 +379,10 @@ addEventListener('message',(e)=>{const m=e.data||{};
     gh.style.opacity='0';}}
   else if(m.t==='tree'){parent.postMessage({t:'tree',id:m.id,tree:document.body?tree(document.body,0):null},'*');}
   else if(m.t==='pick'){const el=E(m.path);if(el){cur=el;place(box,el,3);parent.postMessage({t:'sel',...info(el)},'*');}}
-  else if(m.t==='style'){const el=E(m.path);if(el){const pv=el.style[m.prop];
+  else if(m.t==='style'){const el=E(m.path);if(el){cur=el;const pv=el.style[m.prop];
     el.style[m.prop]=m.value;place(box,el,3);
     parent.postMessage({t:'sel',...info(el),prev:pv,next:m.value,prop:m.prop,tag_:m.tag_},'*');}}
-  else if(m.t==='text'){const el=E(m.path);if(el){const pv=el.textContent;el.textContent=m.value;
+  else if(m.t==='text'){const el=E(m.path);if(el){cur=el;const pv=el.textContent;el.textContent=m.value;
     place(box,el,3);parent.postMessage({t:'txt',path:m.path,prev:pv,next:m.value},'*');}}
   else if(m.t==='serialize'){const c=document.documentElement.cloneNode(true);
     c.querySelectorAll('[data-dc-agent],[data-dc-ui]').forEach(n=>n.remove());
@@ -611,6 +611,7 @@ function onKey(k) {
   if (mod && (key === "=" || key === "+")) { zoomBy(1.25); return true; }
   if (mod && (key === "-" || key === "_")) { zoomBy(1 / 1.25); return true; }
   if (mod && key === "0") { zoomTo(1); return true; }
+  if (isFocus()) { if (key === "Escape" && !isPresent()) unfocus(); return mod || key === "Escape"; }   // the canvas is hidden
   if (mod && lower === "s") { if (!readOnly) save(); return true; }
   if (mod && lower === "z") { if (!readOnly) step(!k.shift); return true; }
   if (mod || k.alt) return false;
@@ -642,13 +643,13 @@ function render() {
   const want = new Map();
   for (const b of boards) if (onPage(b) && files[b.file] !== undefined) want.set(b.file, b);
 
-  for (const [file, rec] of [...shown]) {
-    if (want.has(file)) continue;
-    rec.el.remove(); shown.delete(file); frames.delete(file); _openSig = null;
-  }
+  // Boards off this page, or deleted, are parked hidden rather than removed: their edits live only
+  // in the iframe until Save, and a page switch or an undo must find them intact.
+  for (const [file, rec] of shown) if (!want.has(file) && !rec.el.hidden) { rec.el.hidden = true; _openSig = null; }
   for (const [file, b] of want) {
     const rec = shown.get(file);
     if (rec) {                                   // reuse: never reload a live iframe
+      if (rec.el.hidden) { rec.el.hidden = false; _openSig = null; }
       placeBoard(rec.el, b);
       if (rec.src !== files[file]) {
         rec.src = files[file];
@@ -1085,7 +1086,7 @@ function drawBoardProps(b) {
       mark(); ensurePages();
       let id;
       if (v === NEW) { let i = pages.length + 1; while (pages.some(p => p.id === "page-" + i)) i++;
-        id = "page-" + i; pages.push({ id, name: "Page " + (pages.length + 1) }); }
+        id = "page-" + i; pages.push({ id, name: freePageName() }); }
       else id = (pages.find(p => p.name === v) || {}).id;
       if (!id || id === pageOf(b)) { commitCanvas("page"); paintPageBtn(); return; }
       b.page = id; commitCanvas("move to page"); goPage(id); selectBoard(b.file);
@@ -1352,8 +1353,17 @@ function addArtboard() {
     ...(pages.length ? { page } : {}) });
   render(); commitCanvas("artboard"); setMode("select"); selectBoard(name);
 }
-function duplicateBoard(file) {
+// Pull the live source of artboards out of their iframes into files[], without reloading them.
+async function sync(list) {
+  for (const file of list || [...frames.keys()]) {
+    const f = frames.get(file); if (!f) continue;
+    const h = await askHtml(f); if (!h) continue;
+    files[file] = h; const rec = shown.get(file); if (rec) rec.src = h;
+  }
+}
+async function duplicateBoard(file) {
   const b = boards.find(x => x.file === file); if (!b) return;
+  await sync([file]);
   const name = freeName(stem(file).replace(/\d+$/, "") + "Copy");
   files[name] = files[file];
   mark();
@@ -1367,7 +1377,8 @@ function deleteBoard(file) {
   mark(); boards.splice(i, 1);
   sel = null; boardSel = null; render(); commitCanvas("delete artboard"); drawTree(); drawProps();
 }
-function dl(file) {
+async function dl(file) {
+  await sync([file]);
   const blob = new Blob([files[file]], { type: "text/html" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = file; a.click(); URL.revokeObjectURL(a.href);
@@ -1387,16 +1398,24 @@ function goPage(id) {
   page = id; touched = false; sel = null; boardSel = null; bcast({ t: "deselect" });
   render(); paintInk(); drawTree(); drawProps(); paintPageBtn(); fit();
 }
+// Page names stay unique: the artboard panel picks a page by its name.
+function uniqueName(name, except) {
+  const taken = (n) => pages.some(p => p.id !== except && p.name === n);
+  if (!taken(name)) return name;
+  let i = 2; while (taken(name + " " + i)) i++;
+  return name + " " + i;
+}
+function freePageName() { let n = pages.length + 1; while (pages.some(p => p.name === "Page " + n)) n++; return "Page " + n; }
 function newPage() {
   mark(); ensurePages();
   let i = pages.length + 1; while (pages.some(p => p.id === "page-" + i)) i++;
-  pages.push({ id: "page-" + i, name: "Page " + (pages.length + 1) });
+  pages.push({ id: "page-" + i, name: freePageName() });
   commitCanvas("new page"); goPage("page-" + i);
 }
 function renamePage(id, name) {
   name = name.trim(); if (!name) return;
   mark(); ensurePages();
-  const p = pages.find(x => x.id === (id || pages[0].id)); if (p) p.name = name.slice(0, 60);
+  const p = pages.find(x => x.id === (id || pages[0].id)); if (p) p.name = uniqueName(name.slice(0, 60), p.id);
   commitCanvas("rename page"); paintPageBtn();
 }
 function deletePage(id) {
@@ -1489,8 +1508,9 @@ docBtn.onclick = () => {
 /* ---- focus / print / save ------------------------------------------------- */
 const focusEl = $("#focus"), fwrap = focusEl.querySelector(".fwrap");
 let focusFile = null;
-function focusOn(b) {
+async function focusOn(b) {
   closeMenu(); focusFile = b.file;
+  await sync([b.file]);
   fwrap.textContent = "";
   const f = document.createElement("iframe");
   f.setAttribute("sandbox", "allow-scripts allow-forms allow-modals"); f.title = nameOf(b);
@@ -1521,6 +1541,7 @@ async function exportPdf(scope) {
     scope === "all" ? true : scope === "page" ? onPage(b) : b.file === scope))
     .sort((a, b) => order.indexOf(pages.length ? pageOf(a) : null) - order.indexOf(pages.length ? pageOf(b) : null));
   if (!list.length) { printing = false; return; }
+  await sync(list.map(b => b.file));
   const o = $("#print-out"); o.textContent = "";
   const css = ["@page{margin:0}"], waits = [];
   list.forEach((b, i) => {
@@ -1557,10 +1578,11 @@ const askHtml = (f) => new Promise((res) => {
 });
 async function save() {
   if (readOnly) return;
+  if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();   // commit a note or field mid-edit
   const btn = $("#t-save"), was = btn.textContent;
   btn.textContent = "Saving…"; btn.disabled = true;
   try {
-    for (const [file, f] of frames) { const h = await askHtml(f); if (h) files[file] = h; }
+    await sync();
     const live = new Set(boards.map(b => b.file));
     const out = {};
     for (const [k, v] of Object.entries(files)) if (!/\.html$/i.test(k) || live.has(k)) out[k] = v;
@@ -1577,6 +1599,9 @@ async function save() {
     c.querySelector("#doc-btn").innerHTML = c.querySelector("#doc-btn").querySelector("span").outerHTML;
     c.querySelectorAll(".menu").forEach(n => n.remove());
     c.querySelector("body").className = "";
+    const sv = c.querySelector("#t-save"); sv.removeAttribute("disabled"); sv.textContent = "Save";
+    c.querySelector("#tree").removeAttribute("style"); c.querySelector("#side-btn").classList.remove("on");
+    c.querySelectorAll("#tabs button[data-tab]").forEach(t => t.classList.toggle("on", t.dataset.tab === "edit"));
     c.querySelector("#canvas-doc").textContent = state;
     const blob = new Blob(["<!doct" + "ype html>\n" + c.outerHTML], { type: "text/html" });
     const a = document.createElement("a");
@@ -1682,8 +1707,9 @@ function showSlide(i) {
   fwrap.append(f);
   $("#slide-n").textContent = (slide + 1) + " / " + d.length;
 }
-function present(on) {
+async function present(on) {
   closeMenu();
+  if (on) await sync(deck().map(b => b.file));
   document.body.classList.toggle("present", on);
   focusEl.classList.toggle("on", on);
   if (on) { showSlide(slide < 0 ? 0 : slide); }
