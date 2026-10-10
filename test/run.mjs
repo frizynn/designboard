@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Drives seed.mjs end to end. Node only, no browser.
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -72,6 +72,28 @@ ok("rejects extract into a non-empty directory",
   /not empty/.test(rejects(["--extract", "spring-menu.html", "--to", "back"]) || ""));
 ok("rejects a page that is not a canvas",
   /not a designboard page/.test(rejects(["--check", "Main.html"]) || ""));
+
+console.log("\npages and notes");
+writeFileSync(join(dir, "pages.json"), JSON.stringify({
+  artboards: [{ file: "Main.html", x: 0, y: 0, w: 720, h: 420, page: "a" },
+              { file: "Evil.html", x: 0, y: 0, w: 720, h: 420, page: "b" }],
+  pages: [{ id: "a", name: "Flows" }, { id: "b", name: "Components" }],
+  notes: [{ id: "t", kind: "title", x: 0, y: -300, text: "Flows", page: "a" }],
+}));
+const paged = spawnSync(process.execPath, [SEED, "--template", TPL, "--out", "paged.html",
+  "--title", "Paged Canvas", "--artboard", "Main.html", "--artboard", "Evil.html", "--canvas", "pages.json"],
+  { cwd: dir, encoding: "utf8" });
+ok("seeds a title note on a paged canvas", paged.status === 0 && /^ok:/.test(run(["--check", "paged.html"])), paged.stderr);
+const overlap = paged.stderr;
+ok("no overlap warning across pages", !/overlap/.test(overlap), overlap);
+writeFileSync(join(dir, "badnote.json"), JSON.stringify({ notes: [{ id: "x", kind: "banner", x: 0, y: 0, text: "x" }] }));
+ok("rejects an unknown note kind",
+  /kind must be/.test(rejects(["--template", TPL, "--out", "a-poster.html", "--title", "A Poster",
+    "--artboard", "Main.html", "--canvas", "badnote.json"]) || ""));
+const tpl = readFileSync(TPL, "utf8");
+ok("template has the page menu and no bottom zoom bar", tpl.includes('id="page-btn"') && !tpl.includes('id="bar"'));
+ok("template blocks browser zoom from every surface", /addEventListener\("wheel"[\s\S]{0,900}capture: true/.test(tpl));
+ok("template prints each artboard on its own sheet", tpl.includes("@page pb"));
 
 rmSync(dir, { recursive: true, force: true });
 console.log(`\n${pass} passed, ${fail} failed\n`);

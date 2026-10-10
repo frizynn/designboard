@@ -2,114 +2,134 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>__CANVAS_TITLE__</title>
 <style>
   :root{
-    --bg:#191919; --side:#1e1e1e; --side2:#232323; --field:#2b2b2b; --field2:#333;
-    --line:#383838; --line2:#2e2e2e; --ink:#e8e8e8; --muted:#8b8b8b; --dim:#6a6a6a;
-    --row:#3a3a3a; --accent:#2f5da8; --hand:#e0568c; --note:#fbf3bd; --noteink:#3d3a20;
+    --bg:#1b1b1b; --head:#1f1f1f; --panel:#252525; --panel2:#2c2c2c; --field:#2b2b2b; --field2:#353535;
+    --line:#3a3a3a; --line2:#2f2f2f; --ink:#ececec; --muted:#9a9a9a; --dim:#6e6e6e;
+    --row:#33415c; --accent:#3d7eff; --accent-bg:#1f3157; --note:#fbf3bd; --noteink:#3d3a20;
     --ease:cubic-bezier(.4,0,.2,1); --ease-out:cubic-bezier(.23,1,.32,1);
-    --t-tap:110ms; --t-hover:130ms; --t-pop:180ms;
+    --t-tap:110ms; --t-hover:130ms; --t-pop:180ms; --side-w:330px; --head-h:52px;
   }
   *{box-sizing:border-box}
-  html,body{height:100%;margin:0;overflow:hidden}
-  body{background:var(--bg);color:var(--ink);
+  [hidden]{display:none!important}
+  html,body{height:100%;margin:0;overflow:hidden;overscroll-behavior:none}
+  body{background:var(--bg);color:var(--ink);touch-action:none;
     font:13px/1.45 ui-sans-serif,-apple-system,"Segoe UI",system-ui,sans-serif;
     -webkit-font-smoothing:antialiased}
-  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+  button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
   input,select{font:inherit;color:inherit;background:none;border:0;outline:0;min-width:0}
-  :focus-visible{outline:2px solid #6b8fd4;outline-offset:1px;border-radius:4px}
-  .f:focus-within{border-color:#6b8fd4}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-radius:4px}
+  .f:focus-within{border-color:var(--accent)}
+  kbd{font:inherit;color:var(--dim);margin-left:auto;padding-left:18px}
 
   #app{position:relative;height:100%;overflow:hidden}
-  #stage{position:absolute;inset:0}
-  #viewport{position:absolute;inset:0;overflow:hidden;cursor:grab}
-  #viewport.panning{cursor:grabbing}
+  #head{position:absolute;top:0;left:0;right:0;height:var(--head-h);display:flex;align-items:center;
+    gap:8px;padding:0 12px 0 10px;background:var(--head);border-bottom:1px solid var(--line2);z-index:8}
+  #head .sp{flex:1}
+  #doc-btn{display:flex;align-items:center;gap:6px;padding:6px 10px;border-radius:8px;
+    font-size:15px;color:var(--ink);max-width:50vw}
+  #doc-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #doc-btn svg{color:var(--muted);flex:none}
+  #t-save{padding:6px 14px;border-radius:8px;background:var(--ink);color:#151515;font-weight:500}
+  #t-save:disabled{opacity:.6}
+
+  #stage{position:absolute;top:var(--head-h);left:0;right:0;bottom:0;overflow:hidden}
+  #viewport{position:absolute;inset:0;overflow:hidden;cursor:default}
+  #viewport.panning,#viewport.hand.panning{cursor:grabbing}
+  #viewport.hand{cursor:grab}
   #viewport.pen{cursor:crosshair}
   #viewport.noting{cursor:copy}
-  #world{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
+  #world{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform;--k:1;--inv:1}
   #ink{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
   #deny{position:fixed;z-index:7;pointer-events:none;opacity:0;display:grid;place-items:center;
     border:1.5px dashed var(--dim);background:rgb(255 255 255/.05);color:var(--dim);
     font-size:12px;border-radius:6px;transition:opacity 90ms linear}
 
+  /* floating pills, top-left tools and top-right view controls */
+  .pill{position:absolute;top:12px;z-index:6;display:flex;align-items:center;gap:2px;padding:5px;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    box-shadow:0 8px 24px rgb(0 0 0/.35)}
+  .pill .sep{width:1px;height:20px;background:var(--line);margin:0 5px}
+  .pill button{height:32px;min-width:32px;border-radius:8px;display:flex;align-items:center;
+    justify-content:center;gap:4px;color:var(--muted);position:relative;
+    transition:background var(--t-hover) var(--ease),color var(--t-hover) var(--ease),
+      transform var(--t-tap) var(--ease-out)}
+  .pill button:active{transform:scale(.94)}
+  .pill button.on{background:var(--accent-bg);color:#8fb4ff}
+  .pill button.txt{padding:0 9px;color:var(--ink);font-size:14px}
+  .pill button .cv{color:var(--dim)}
+  #toolbar{left:12px}
+  #hud{right:12px;transition:transform 260ms var(--ease-out)}
+  body.side #hud{transform:translateX(calc(-1 * var(--side-w)))}
+  #zoom-btn{min-width:72px!important;font-variant-numeric:tabular-nums}
+
+  /* tooltips: label plus key, delayed so they never flicker while moving across a toolbar */
+  [data-tip]::after{content:attr(data-tip);position:absolute;top:calc(100% + 8px);left:50%;
+    transform:translateX(-50%) translateY(-2px);white-space:nowrap;pointer-events:none;opacity:0;
+    padding:4px 8px;border-radius:6px;background:#111;border:1px solid var(--line);color:var(--ink);
+    font-size:12px;transition:opacity var(--t-hover) var(--ease),transform var(--t-hover) var(--ease);
+    z-index:20}
+
+  /* menus */
+  .menu{position:fixed;z-index:50;min-width:220px;max-width:340px;padding:6px;background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;box-shadow:0 14px 40px rgb(0 0 0/.5);
+    transform-origin:top left;animation:pop var(--t-pop) var(--ease-out)}
+  @keyframes pop{from{opacity:0;transform:scale(.97) translateY(-3px)}}
+  .menu .mi{display:flex;align-items:center;gap:10px;width:100%;padding:7px 10px;border-radius:7px;
+    color:var(--ink);text-align:left;font-size:13.5px;white-space:nowrap}
+  .menu .mi:disabled{color:var(--dim);cursor:default}
+  .menu .mi .ck{width:14px;flex:none;color:var(--accent);display:grid;place-items:center}
+  .menu .mi .lbl{flex:1;overflow:hidden;text-overflow:ellipsis}
+  .menu .mi .more{color:var(--dim);padding:0 4px;border-radius:5px;margin-right:-4px}
+  .menu .mh{padding:8px 10px 4px;color:var(--dim);font-size:12px}
+  .menu .ms{height:1px;background:var(--line);margin:5px 4px}
+  .menu input{width:100%;padding:6px 9px;border:1px solid var(--accent);border-radius:7px;
+    background:var(--field);font-size:13.5px}
+
+  /* artboards */
   .board{position:absolute}
-  .board-strip{display:flex;align-items:center;gap:8px;height:26px;color:var(--muted);
-    font-size:13px;user-select:none}
-  .board-strip .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .board-strip .ic{opacity:0;display:flex;gap:10px;transition:opacity .14s var(--ease)}
-  .board-strip .ic button{display:flex;color:var(--muted);
+  .board-strip{position:absolute;left:0;bottom:100%;height:32px;display:flex;align-items:center;gap:10px;
+    width:calc(100% * var(--k));transform:scale(var(--inv));transform-origin:0 100%;
+    color:var(--muted);font-size:13px;user-select:none;cursor:default}
+  .board-strip .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:4px 0}
+  .board.selected .board-strip .nm{color:#8fb4ff}
+  .board-strip .ic{display:flex;align-items:center;gap:8px;flex:none}
+  .board-strip .ic button{display:flex;align-items:center;gap:4px;color:var(--muted);
     transition:color var(--t-hover) var(--ease),transform var(--t-tap) var(--ease-out)}
-  .board-strip .ic button:active{transform:scale(.9)}
+  .board-strip .ic button:active{transform:scale(.92)}
+  .board-strip .ic .play{border:1px solid var(--line);border-radius:6px;padding:2px 7px 2px 5px;
+    font-size:11px;letter-spacing:.06em}
   .board-frame{background:#fff;overflow:hidden;box-shadow:0 1px 3px rgb(0 0 0/.4)}
-  .board.selected .board-frame{outline:2px solid var(--hand);outline-offset:0}
+  .board.selected .board-frame{outline:calc(2px * var(--inv)) solid var(--accent);outline-offset:0}
   .board-frame iframe{display:block;width:100%;height:100%;border:0;background:#fff}
   .note{position:absolute;background:var(--note);color:var(--noteink);padding:12px 14px;
     font-size:12.5px;line-height:1.5;white-space:pre-wrap;cursor:grab;
     box-shadow:0 2px 8px rgb(0 0 0/.35);
     transition:box-shadow var(--t-pop) var(--ease-out)}
+  .note.title{background:none;box-shadow:none;padding:0;color:var(--ink);font-size:72px;
+    font-weight:700;line-height:1.1;white-space:nowrap;letter-spacing:-.01em}
   .note.dragging{cursor:grabbing;box-shadow:0 10px 26px rgb(0 0 0/.5)}
-  .note[contenteditable=true]{outline:2px solid var(--hand);cursor:text}
+  .note.title.dragging{box-shadow:none;opacity:.8}
+  .note[contenteditable=true]{outline:2px solid var(--accent);cursor:text}
 
-  #topbar{position:absolute;top:0;left:0;right:0;height:46px;display:flex;align-items:center;
-    gap:10px;padding:0 344px 0 14px;pointer-events:none;z-index:6}
-  #topbar>*{pointer-events:auto}
-  #doc-title{color:var(--muted);font-size:13px}
-  #topbar .sp{flex:1}
-  #t-toggle{width:30px;height:26px;border-radius:6px;display:grid;place-items:center;
-    background:var(--accent);color:#fff}
-  #t-present{padding:5px 12px;border-radius:7px;color:var(--muted);
-    transition:background var(--t-hover) var(--ease),color var(--t-hover) var(--ease),
-      transform var(--t-tap) var(--ease-out)}
-  #t-present:hover{background:var(--field);color:var(--ink)}
-  #t-present:active{transform:scale(.97)}
-  #t-save{padding:5px 14px;border-radius:7px;border:1px solid var(--line);color:var(--ink);
-    transition:background var(--t-hover) var(--ease),transform var(--t-tap) var(--ease-out)}
-  #t-save:active{transform:scale(.97)}
-  #t-save:disabled{opacity:.6;transform:none}
-  #t-toggle{transition:transform var(--t-tap) var(--ease-out),filter var(--t-hover) var(--ease)}
-  #t-toggle:active{transform:scale(.94)}
-
-  #bar{position:absolute;left:50%;bottom:18px;transform:translateX(calc(-50% - 165px));display:flex;
-    align-items:center;gap:2px;padding:4px;background:var(--side);border:1px solid var(--line);
-    border-radius:9px;box-shadow:0 6px 20px rgb(0 0 0/.4)}
-  #bar button{padding:5px 10px;border-radius:6px;color:var(--muted);
-    transition:background var(--t-hover) var(--ease),color var(--t-hover) var(--ease),
-      transform var(--t-tap) var(--ease-out)}
-  #bar button:active{transform:scale(.96)}
-  body.no-side #bar{transform:translateX(-50%)}
-  #zoom{min-width:46px;text-align:center;color:var(--muted);font-variant-numeric:tabular-nums}
-  #bar .sep{width:1px;height:16px;background:var(--line);margin:0 4px}
-  #pages{padding:4px 8px;border-radius:6px;color:var(--muted)}
-
-  /* ---- sidebar ---- */
-  #side{position:absolute;top:0;right:0;bottom:0;width:330px;z-index:5;
-    background:var(--side);border-left:1px solid var(--line2);
-    display:flex;flex-direction:column;overflow:hidden;
-    box-shadow:-1px 0 0 var(--line2), -18px 0 34px rgb(0 0 0/.28);
+  /* sidebar */
+  #side{position:absolute;top:var(--head-h);right:0;bottom:0;width:var(--side-w);z-index:7;
+    background:var(--head);border-left:1px solid var(--line2);
+    display:flex;flex-direction:column;overflow:hidden;transform:translateX(100%);
     transition:transform 260ms var(--ease-out)}
-  body.no-side #side{transform:translateX(100%)}
-  #topbar{transition:padding-right 260ms var(--ease-out)}
-  body.no-side #topbar{padding-right:14px}
-  #bar{transition:transform 260ms var(--ease-out)}
-  #tabs{display:flex;gap:20px;padding:14px 18px 12px;border-bottom:1px solid var(--line2)}
-  #tabs button{color:var(--dim);font-size:14px;padding:0;
-    transition:color var(--t-hover) var(--ease)}
-  #tabs button.on{color:#fff;font-weight:600}
-  #tools{display:flex;gap:2px;padding:8px 10px;border-bottom:1px solid var(--line2)}
-  #tools button{width:36px;height:32px;border-radius:7px;display:grid;place-items:center;
-    color:var(--muted);transition:background var(--t-hover) var(--ease),
-      color var(--t-hover) var(--ease),transform var(--t-tap) var(--ease-out)}
-  #tools button:active{transform:scale(.94)}
-  #tools button.on{background:var(--field2);color:#fff;box-shadow:inset 0 0 0 1px var(--line)}
-
-  #hint{padding:0 12px 9px;color:var(--dim);font-size:12px;border-bottom:1px solid var(--line2);
-    margin-top:-4px}
-  #hint b{color:var(--muted);font-weight:500}
-  #tree{max-height:230px;min-height:120px;overflow:auto;padding:8px 0;
+  body.side #side{transform:none;box-shadow:-18px 0 34px rgb(0 0 0/.28)}
+  #tabs{display:flex;align-items:center;gap:4px;padding:10px 10px 10px 12px;
+    border-bottom:1px solid var(--line2)}
+  #tabs button{color:var(--muted);font-size:14px;padding:6px 10px;border-radius:8px;
+    border:1px solid transparent;transition:color var(--t-hover) var(--ease)}
+  #tabs button.on{color:var(--ink);border-color:var(--accent);background:var(--panel)}
+  #tabs .sp{flex:1}
+  #side-x{width:30px;height:30px;display:grid;place-items:center;border-radius:8px;color:var(--muted)}
+  #tree{max-height:260px;min-height:80px;overflow:auto;padding:8px 0;
     border-bottom:1px solid var(--line2);resize:vertical}
-  .tr{display:flex;align-items:center;gap:6px;padding:3px 14px 3px 0;cursor:default;
+  .tr{display:flex;align-items:center;gap:6px;padding:4px 14px 4px 0;cursor:default;
     white-space:nowrap;transition:background var(--t-hover) var(--ease)}
   .tr.on{background:var(--row)}
   .tr .cv{width:14px;flex:none;display:grid;place-items:center;color:var(--dim);cursor:pointer}
@@ -123,16 +143,15 @@
   #props .sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
   #props .sh b{font-weight:500;font-size:14px}
   #props .sh .rs{color:var(--dim);font-size:13px;cursor:pointer}
-  #props .sh .rs:hover{color:var(--ink)}
   #props .g{display:flex;gap:8px;margin-bottom:8px}
   .f{flex:1;display:flex;align-items:center;gap:8px;background:var(--field);
     border:1px solid var(--line);border-radius:8px;padding:7px 11px;min-width:0}
   .f .lb{color:var(--muted);flex:none;display:flex;align-items:center;gap:6px}
-  .f .lb i{width:5px;height:5px;border-radius:50%;background:#6b8fd4;display:none}
+  .f .lb i{width:5px;height:5px;border-radius:50%;background:var(--accent);display:none}
   .f.set .lb i{display:block}
   .f input{flex:1;text-align:right;font-variant-numeric:tabular-nums;
     transition:color 120ms var(--ease)}
-  .f input.bad{color:#e0568c}
+  .f input.bad{color:#ff6b8b}
   .f .u{color:var(--dim);flex:none}
   .f .sw{width:18px;height:18px;border-radius:5px;border:1px solid var(--line);flex:none;
     padding:0;overflow:hidden}
@@ -147,7 +166,6 @@
   .seg.ic button{display:grid;place-items:center;padding:5px 0}
   #props .add{color:var(--dim);font-size:12.5px;margin-top:2px}
   #props .add span{cursor:pointer}
-  #props .add span:hover{color:var(--ink)}
   #props .empty{padding:60px 24px;text-align:center;color:var(--dim);line-height:1.7}
   #props .empty b{display:block;color:var(--muted);font-weight:400;font-size:14px;
     margin-bottom:4px}
@@ -156,94 +174,116 @@
       transform var(--t-tap) var(--ease-out)}
   #props .btn:active{transform:scale(.97)}
   #props .btn.ghost{background:transparent;color:var(--muted)}
+  #props .btn.danger{background:transparent;color:#ff8da4;border-color:#5a2f3a}
+  #props .acts{display:flex;flex-wrap:wrap;gap:8px}
   #props textarea{width:100%;background:var(--field);border:1px solid var(--line);
     border-radius:8px;padding:8px 10px;color:var(--ink);font:inherit;resize:vertical;
     min-height:66px}
 
   @media (hover:hover) and (pointer:fine){
-    #tools button:hover{background:var(--field);color:var(--ink)}
-    #bar button:hover{background:var(--field);color:var(--ink)}
-    #t-save:hover{background:var(--field)}
-    #tabs button:hover{color:var(--ink)}
-    .tr:hover{background:#2a2a2a}
-    .board:hover .board-strip .ic{opacity:1}
+    .pill button:hover:not(.on){background:var(--field);color:var(--ink)}
+    [data-tip]:hover::after{opacity:1;transform:translateX(-50%);transition-delay:450ms}
+    #doc-btn:hover{background:var(--field)}
+    #t-save:hover{background:#fff}
+    #tabs button:hover:not(.on){color:var(--ink)}
+    #side-x:hover{background:var(--field);color:var(--ink)}
+    .menu .mi:hover:not(:disabled){background:var(--field2)}
+    .menu .mi .more:hover{background:var(--line);color:var(--ink)}
+    .tr:hover:not(.on){background:#2a2a2a}
     .board-strip .ic button:hover{color:var(--ink)}
     .seg button:hover:not(.on){color:var(--ink)}
-    #props .sh .rs:hover{color:var(--ink)}
-    #props .add span:hover{color:var(--ink)}
+    #props .sh .rs:hover,#props .add span:hover{color:var(--ink)}
+    #stagebar button:hover,#focusbar button:hover{background:var(--field);color:var(--ink)}
   }
   @media (prefers-reduced-motion:reduce){
     *,*::before,*::after{transition-duration:1ms!important;animation-duration:1ms!important}
-    #side,#bar,#topbar{transition:none!important}
-    #tools button:active,#bar button:active,#t-save:active,.seg button:active,
-    #t-toggle:active,.board-strip .ic button:active{transform:none}
+    #side,#hud{transition:none!important}
+    .pill button:active,.seg button:active,.board-strip .ic button:active,#props .btn:active{transform:none}
   }
 
-  body.view #side,body.view #tools,body.view #tabs{display:none}
-  body.view #app{--noop:0}
-  body.view #side{display:none}
-  #stagebar{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);z-index:40;
-    display:none;align-items:center;gap:6px;padding:6px 8px;background:var(--side);
-    border:1px solid var(--line);border-radius:9px;box-shadow:0 6px 20px rgb(0 0 0/.45)}
-  body.present #stagebar{display:flex}
-  #stagebar button{padding:5px 11px;border-radius:6px;color:var(--muted);
+  body.view .edit-only{display:none!important}
+
+  /* focused artboard and present mode */
+  #focus{position:fixed;inset:0;z-index:30;background:var(--bg);display:none;flex-direction:column}
+  #focus.on{display:flex}
+  #focusbar{height:48px;flex:none;display:flex;align-items:center;gap:6px;padding:0 10px;
+    background:var(--head);border-bottom:1px solid var(--line2)}
+  #focusbar .t{flex:1;text-align:center;color:var(--muted)}
+  #focusbar button,#stagebar button{padding:6px 11px;border-radius:7px;color:var(--muted);
     transition:background var(--t-hover) var(--ease),color var(--t-hover) var(--ease),
       transform var(--t-tap) var(--ease-out)}
-  #stagebar button:active{transform:scale(.96)}
-  #slide-n{color:var(--muted);font-variant-numeric:tabular-nums;min-width:54px;text-align:center}
-  body.present #topbar,body.present #bar,body.present #side,body.present #deny{display:none}
-  #focus{position:fixed;inset:0;z-index:30;background:var(--bg);display:none}
-  #focus.on{display:block}
-  #focus iframe{width:100%;height:100%;border:0;background:#fff}
-  body.present #focus{background:#0d0d0d;display:grid;place-items:center;padding:34px 34px 74px}
+  #focusbar button:active,#stagebar button:active{transform:scale(.96)}
+  #focus .fwrap{flex:1;min-height:0;display:grid;place-items:center;overflow:auto}
+  #focus iframe{width:100%;height:100%;border:0;background:#fff;display:block}
+  body.present #focusbar{display:none}
+  body.present #focus{background:#0d0d0d}
+  body.present #focus .fwrap{padding:34px 34px 74px}
   body.present #focus iframe{border-radius:3px;box-shadow:0 12px 44px rgb(0 0 0/.6)}
-  body.present #focus-close{display:none}
-  #focus-close{position:fixed;top:14px;right:14px;z-index:31;padding:6px 14px;
-    background:var(--side);border:1px solid var(--line);border-radius:7px}
+  #stagebar{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:40;
+    display:none;align-items:center;gap:6px;padding:6px 8px;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;box-shadow:0 6px 20px rgb(0 0 0/.45)}
+  body.present #stagebar{display:flex}
+  #slide-n{color:var(--muted);font-variant-numeric:tabular-nums;min-width:54px;text-align:center}
+
   #print-out{position:absolute;left:-100000px;top:0;width:1px;height:1px;overflow:hidden}
   #print-out iframe{border:0;display:block}
   @media print{
-    #app,#topbar,#bar,#focus{display:none!important}
+    html,body{height:auto!important;overflow:visible!important;background:#fff!important}
+    #app,#focus,#stagebar,.menu{display:none!important}
     #print-out{position:static!important;left:auto!important;width:auto!important;
       height:auto!important;overflow:visible!important}
-    #print-out .p{page-break-after:always}
+    #print-out .p{break-after:page;break-inside:avoid}
+    #print-out .p:last-child{break-after:auto}
   }
 </style>
+<style id="print-pages"></style>
 </head>
 <body>
 <div id="app">
+  <header id="head">
+    <button id="doc-btn" aria-haspopup="menu"><span id="doc-title">__CANVAS_TITLE__</span></button>
+    <span class="sp"></span>
+    <button id="t-save" class="edit-only">Save</button>
+  </header>
   <div id="stage">
     <div id="viewport"><div id="world"><svg id="ink"></svg></div></div>
     <div id="deny">Drop inside an artboard</div>
-    <div id="topbar">
-      <span id="doc-title">__CANVAS_TITLE__</span><span class="sp"></span>
-      <button id="t-present" title="Present (P)">Present</button>
-      <button id="t-toggle" title="Toggle sidebar"></button>
-      <button id="t-save">Save</button>
+    <div id="toolbar" class="pill">
+      <button id="page-btn" class="txt" aria-haspopup="menu"></button>
+      <span class="sep"></span>
+      <span id="tools" style="display:flex;gap:2px"></span>
     </div>
-    <div id="bar">
-      <select id="pages" hidden></select><span class="sep" id="pages-sep" hidden></span>
-      <button id="zoom-out">&minus;</button><span id="zoom">100%</span>
-      <button id="zoom-in">+</button><button id="fit">Fit</button>
-      <span class="sep"></span><button id="print">Export PDF</button>
+    <div id="hud" class="pill">
+      <button id="play-btn" data-tip="Play" aria-haspopup="menu" aria-label="Play"></button>
+      <button id="side-btn" class="edit-only" data-tip="Properties" aria-label="Toggle properties"></button>
+      <span class="sep"></span>
+      <button id="zoom-btn" class="txt" aria-haspopup="menu"></button>
     </div>
   </div>
-  <aside id="side">
+  <aside id="side" class="edit-only">
     <div id="tabs">
-      <button class="on" data-tab="edit">Edit</button>
+      <button class="on" data-tab="edit">Properties</button>
       <button data-tab="code">Code</button>
       <button data-tab="tweaks">Tweaks</button>
+      <span class="sp"></span>
+      <button id="side-x" aria-label="Close panel"></button>
     </div>
-    <div id="tools"></div>
-    <div id="hint"></div>
     <div id="tree"></div>
     <div id="props"></div>
   </aside>
 </div>
-<div id="focus"><button id="focus-close">Close</button></div>
+<div id="focus">
+  <div id="focusbar">
+    <button id="focus-close">Close</button>
+    <span class="t" id="focus-title"></span>
+    <button id="focus-prev" aria-label="Previous artboard">&larr;</button>
+    <button id="focus-next" aria-label="Next artboard">&rarr;</button>
+  </div>
+  <div class="fwrap"></div>
+</div>
 <div id="stagebar">
   <button id="s-prev">&larr;</button><span id="slide-n"></span>
-  <button id="s-next">&rarr;</button><span class="sep"></span>
+  <button id="s-next">&rarr;</button>
   <button id="s-exit">Exit</button>
 </div>
 <div id="print-out"></div>
@@ -256,7 +296,7 @@ const raw = document.getElementById("canvas-doc").textContent;
 const DOC = JSON.parse(raw.replace(/<\\\/script/g, "</scr" + "ipt").replace(/<\\!--/g, "<" + "!--"));
 const files = DOC.files || {};
 const manifest = DOC.canvas || {};
-const boards = manifest.artboards || [];
+const boards = manifest.artboards || (manifest.artboards = []);
 const notes = manifest.notes || (manifest.notes = []);
 const drawings = manifest.drawings || (manifest.drawings = []);
 const pages = manifest.pages || [];
@@ -273,7 +313,7 @@ const P=(el)=>{const p=[];while(el&&el!==document.documentElement){const q=el.pa
 const E=(p)=>{let el=document.documentElement;for(const i of p){if(!el||!el.children[i])return null;el=el.children[i];}return el;};
 let cur=null,on=false,tool=null;
 const box=document.createElement('div'),hov=document.createElement('div');
-const PINK='#e0568c';
+const PINK='#3d7eff';
 const HB='position:absolute;pointer-events:none;z-index:2147483647;box-sizing:border-box;';
 const FADE='opacity:0;transition:opacity 120ms cubic-bezier(.4,0,.2,1);';
 box.style.cssText=HB+FADE+'border:1.5px solid '+PINK+';';
@@ -303,7 +343,7 @@ for(const c of ['nw','ne','sw','se']){const h=document.createElement('div');
 box.dataset.dcUi='1';hov.dataset.dcUi='1';
 const gh=document.createElement('div');gh.dataset.dcUi='1';
 gh.style.cssText=HB+'opacity:0;transition:opacity 90ms linear;border:1.5px dashed '+PINK+';'
-  +'background:rgba(224,86,140,.10);display:grid;place-items:center;color:'+PINK
+  +'background:rgba(61,126,255,.10);display:grid;place-items:center;color:'+PINK
   +';font:12px/1 ui-sans-serif,system-ui;letter-spacing:.02em';
 const SHAPE={text:{w:90,h:24,r:'3px',t:'Text'},rect:{w:160,h:90,r:'8px',t:''},
   ellipse:{w:120,h:120,r:'50%',t:''}};
@@ -389,8 +429,19 @@ addEventListener('click',(e)=>{if(!on)return;e.preventDefault();e.stopPropagatio
     t=n;}
   cur=t;place(box,cur,3);hov.style.opacity='0';parent.postMessage({t:'sel',...info(cur)},'*');},true);
 addEventListener('wheel',(e)=>{e.preventDefault();
-  parent.postMessage({t:'wheel',dx:e.deltaX,dy:e.deltaY,ctrl:e.ctrlKey||e.metaKey},'*');},
-  {passive:false,capture:true});
+  parent.postMessage({t:'wheel',dx:e.deltaX,dy:e.deltaY,mode:e.deltaMode,ctrl:e.ctrlKey||e.metaKey,
+    x:e.clientX,y:e.clientY},'*');},{passive:false,capture:true});
+for(const g of ['gesturestart','gesturechange','gestureend'])addEventListener(g,(e)=>{e.preventDefault();
+  parent.postMessage({t:'gesture',phase:g,scale:e.scale,x:e.clientX,y:e.clientY},'*');},{passive:false,capture:true});
+const ED=(t)=>!!t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+const fwd=(e)=>{const m=e.metaKey||e.ctrlKey,k=e.key;
+  const mine=m?/^(=|\\+|-|_|0|s|z)$/i.test(k)
+    :!e.altKey&&!ED(e.target)&&(k===' '||k==='Escape'||k==='Delete'||k==='Backspace'||(on&&/^[vhtfnroadp]$/i.test(k))
+      ||(e.shiftKey&&/^Digit[012]$/.test(e.code)));
+  if(!mine)return;e.preventDefault();
+  parent.postMessage({t:'key',type:e.type,key:k,code:e.code,meta:e.metaKey,ctrl:e.ctrlKey,
+    shift:e.shiftKey,alt:e.altKey,repeat:e.repeat},'*');};
+addEventListener('keydown',fwd,true);addEventListener('keyup',(e)=>{if(e.key===' '&&!ED(e.target))fwd(e);},true);
 addEventListener('scroll',()=>{if(cur)place(box,cur,3);},true);
 })();` + "</scr" + "ipt>";
 
@@ -414,83 +465,176 @@ function resolve(src, withAgent) {
 }
 
 /* ---- icons ---------------------------------------------------------------- */
-const S = (d, x) => '<svg width="17" height="17" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' + d + '</svg>';
+const S = (d, x) => '<svg width="' + (x || 17) + '" height="' + (x || 17) + '" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
 const ICON = {
-  select: S('<path d="M4 2.5 L4 15 L7.2 11.8 L9.4 16.5 L11.6 15.5 L9.4 11 L14 10.6 Z" fill="currentColor" stroke-width="1"/>'),
+  select: S('<path d="M5 3l10.5 6.2-4.6 1.2-2.2 4.4z"/>'),
+  hand:   S('<path d="M7 10V4.8a1.3 1.3 0 0 1 2.6 0V9.5M9.6 9V3.8a1.3 1.3 0 0 1 2.6 0V9.3M12.2 9.3V5a1.3 1.3 0 0 1 2.6 0v6.5c0 3-2.2 5.5-5.2 5.5-1.9 0-3.2-.8-4.3-2.3L3.4 11.8a1.3 1.3 0 0 1 2-1.6L7 12"/>'),
   text:   S('<path d="M4 5V3.5h12V5M10 3.5v13M7.5 16.5h5"/>'),
-  frame:  S('<path d="M6.5 2v16M13.5 2v16M2 6.5h16M2 13.5h16"/>'),
+  frame:  S('<path d="M6.5 2.5v15M13.5 2.5v15M2.5 6.5h15M2.5 13.5h15"/>'),
   note:   S('<path d="M3.5 3.5h13v8l-5 5h-8z"/><path d="M16.5 11.5h-5v5"/>'),
+  pen:    S('<path d="M3 17l1.4-4L13.2 4.2a1.8 1.8 0 0 1 2.6 2.6L7 15.6z"/><path d="M11.8 5.6l2.6 2.6"/>'),
   rect:   S('<rect x="3" y="5" width="14" height="10" rx="2"/>'),
   ellipse:S('<circle cx="10" cy="10" r="6.5"/>'),
   arrow:  S('<path d="M4.5 15.5 L15.5 4.5M9 4.5h6.5V11"/>'),
-  pen:    S('<path d="M3 17l1.6-4.2L13.4 4l3 3-8.8 8.8z"/>'),
-  chev:   '<svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 4l6 6-6 6"/></svg>',
-  boxg:   '<svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 2"><rect x="3" y="3" width="14" height="14" rx="2"/></svg>',
-  boxs:   '<svg width="11" height="11" viewBox="0 0 20 20"><rect x="3" y="8" width="14" height="4" rx="1" fill="currentColor"/></svg>',
-  play:   S('<path d="M6 4l9 6-9 6z"/>'),
-  down:   S('<path d="M10 3v10M6 9.5l4 4 4-4M4 16.5h12"/>'),
-  side:   '<svg width="15" height="15" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="4" width="15" height="12" rx="2"/><path d="M12.5 4v12"/></svg>',
+  shapes: S('<rect x="2.8" y="2.8" width="9" height="9" rx="1.5"/><circle cx="12.5" cy="12.5" r="4.7"/>'),
+  chev:   '<svg width="10" height="10" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 4l6 6-6 6"/></svg>',
+  chevd:  '<svg class="cv" width="12" height="12" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5.5 8l4.5 4.5L14.5 8"/></svg>',
+  check:  S('<path d="M4 10.5l4 4 8-9"/>', 14),
+  dots:   S('<circle cx="4.5" cy="10" r=".6" fill="currentColor"/><circle cx="10" cy="10" r=".6" fill="currentColor"/><circle cx="15.5" cy="10" r=".6" fill="currentColor"/>', 16),
+  plus:   S('<path d="M10 4v12M4 10h12"/>', 15),
+  boxg:   '<svg width="11" height="11" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-dasharray="3 2" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="2"/></svg>',
+  boxs:   '<svg width="11" height="11" viewBox="0 0 20 20" aria-hidden="true"><rect x="3" y="8" width="14" height="4" rx="1" fill="currentColor"/></svg>',
+  play:   S('<path d="M6.5 4.5l9 5.5-9 5.5z"/>'),
+  playsm: S('<path d="M6.5 4.5l9 5.5-9 5.5z"/>', 12),
+  expand: S('<path d="M12 3.5h4.5V8M8 16.5H3.5V12M16.5 3.5l-5 5M3.5 16.5l5-5"/>', 15),
+  down:   S('<path d="M10 3v10M6 9.5l4 4 4-4M4 16.5h12"/>', 15),
+  side:   S('<rect x="2.5" y="4" width="15" height="12" rx="2"/><path d="M12.5 4v12"/>'),
+  x:      S('<path d="M5 5l10 10M15 5L5 15"/>', 15),
 };
-const TOOLS = [["select","Select","v"],["text","Text","t"],["frame","Artboard","f"],
-  ["note","Note","n"],["rect","Rectangle","r"],["ellipse","Ellipse","o"],
-  ["arrow","Arrow","a"],["pen","Draw","d"]];
+// [id, label, key, group]; shapes share one toolbar slot that shows the last one used
+const TOOLS = [["select","Select","v"],["hand","Hand","h"],["text","Text","t"],["frame","Artboard","f"],
+  ["note","Note","n"],["pen","Draw","d"],["rect","Rectangle","r","shape"],
+  ["ellipse","Ellipse","o","shape"],["arrow","Arrow","a","shape"]];
+const IN_FRAME = ["select", "text", "rect", "ellipse"];   // tools that act inside an artboard
 
 const $ = (s) => document.querySelector(s);
 const world = $("#world"), viewport = $("#viewport"), ink = $("#ink");
 const treeEl = $("#tree"), propsEl = $("#props");
 let view = { x: 80, y: 80, k: 1 }, page = null, touched = false;
 let mode = "select", sel = null, trees = new Map(), open = new Set(), boardSel = null;
+let lastShape = "rect";
 const frames = new Map();
-const onPage = (o) => !pages.length || (o.page || pages[0].id) === page;
+const pageOf = (o) => o.page || (pages[0] && pages[0].id);
+const onPage = (o) => !pages.length || pageOf(o) === page;
 const tellAgent = (f, m) => { try { f.contentWindow.postMessage(m, "*"); } catch {} };
 const bcast = (m) => { for (const f of frames.values()) tellAgent(f, m); };
+const stem = (f) => f.replace(/\.html$/i, "");
+const nameOf = (b) => b.title || stem(b.file);
+const readOnly = DOC.mode === "view";
+const isPresent = () => document.body.classList.contains("present");
+const isFocus = () => $("#focus").classList.contains("on");
+
+/* ---- menus ---------------------------------------------------------------- */
+// One popover at a time. Items: {label, kbd, check, on, disabled, more, keep} | {sep} | {head}
+let menuEl = null, menuOwner = null;
+function closeMenu() { if (menuEl) { menuEl.remove(); menuEl = null; menuOwner = null; } }
+function openMenu(anchor, items, opts) {
+  const again = menuOwner === anchor; closeMenu(); if (again && !(opts && opts.force)) return null;
+  const m = document.createElement("div"); m.className = "menu"; m.setAttribute("role", "menu");
+  for (const it of items) {
+    if (it.sep) { m.append(Object.assign(document.createElement("div"), { className: "ms" })); continue; }
+    if (it.head) { m.append(Object.assign(document.createElement("div"), { className: "mh", textContent: it.head })); continue; }
+    if (it.node) { m.append(it.node); continue; }
+    const b = document.createElement("button"); b.className = "mi"; b.setAttribute("role", "menuitem");
+    b.disabled = !!it.disabled;
+    const ck = document.createElement("span"); ck.className = "ck";
+    if (it.check) ck.innerHTML = ICON.check; else if (it.icon) ck.innerHTML = it.icon;
+    const lb = document.createElement("span"); lb.className = "lbl"; lb.textContent = it.label;
+    b.append(ck, lb);
+    if (it.kbd) b.append(Object.assign(document.createElement("kbd"), { textContent: it.kbd }));
+    if (it.more) { const mo = document.createElement("span"); mo.className = "more"; mo.innerHTML = ICON.dots;
+      mo.setAttribute("aria-label", "More"); mo.onclick = (e) => { e.stopPropagation(); it.more(mo, b); };
+      b.append(mo); }
+    b.onclick = () => { if (!it.keep) closeMenu(); it.on && it.on(); };
+    m.append(b);
+  }
+  document.body.append(m);
+  const r = anchor.getBoundingClientRect(), mw = m.offsetWidth, mh = m.offsetHeight;
+  let x = opts && opts.right ? r.right - mw : r.left, y = r.bottom + 6;
+  x = Math.max(8, Math.min(innerWidth - mw - 8, x)); if (y + mh > innerHeight - 8) y = Math.max(8, r.top - mh - 6);
+  m.style.left = x + "px"; m.style.top = y + "px";
+  menuEl = m; menuOwner = anchor; return m;
+}
+addEventListener("pointerdown", (e) => {
+  if (!menuEl || menuEl.contains(e.target)) return;
+  if (menuOwner && menuOwner.contains(e.target)) return;   // the button's own click toggles
+  closeMenu();
+}, true);
 
 /* ---- toolbar -------------------------------------------------------------- */
 const toolsEl = $("#tools");
-for (const [id, label, key] of TOOLS) {
+const toolBtn = {};
+for (const [id, label, key, group] of TOOLS) {
+  if (group === "shape") continue;
   const b = document.createElement("button");
-  b.dataset.tool = id; b.title = label + " (" + key.toUpperCase() + ")";
-  b.innerHTML = ICON[id];
-  b.onclick = () => setMode(id);
-  toolsEl.append(b);
+  b.dataset.tool = id; b.dataset.tip = label + "  " + key.toUpperCase(); b.setAttribute("aria-label", label);
+  b.innerHTML = ICON[id]; b.onclick = () => setMode(id);
+  if (id !== "select" && id !== "hand") b.classList.add("edit-only");
+  toolsEl.append(b); toolBtn[id] = b;
 }
+const shapeBtn = document.createElement("button");
+shapeBtn.className = "edit-only"; shapeBtn.dataset.tip = "Shapes"; shapeBtn.setAttribute("aria-label", "Shapes");
+shapeBtn.onclick = () => openMenu(shapeBtn, TOOLS.filter(t => t[3] === "shape").map(([id, label, key]) => ({
+  label, kbd: key.toUpperCase(), icon: ICON[id], check: mode === id, on: () => setMode(id) })));
+toolsEl.append(shapeBtn);
+const paintShapeBtn = () => { shapeBtn.innerHTML = ICON[lastShape] + ICON.chevd;
+  shapeBtn.classList.toggle("on", TOOLS.some(t => t[3] === "shape" && t[0] === mode)); };
+
 const HINT = {
-  select: "Click an element in an artboard to edit it",
-  text: "Click inside an artboard to drop a text layer",
-  frame: "Adds a new empty artboard to the canvas",
-  note: "Click the canvas to place a sticky note",
-  rect: "Click inside an artboard to drop a rectangle",
-  ellipse: "Click inside an artboard to drop an ellipse",
-  arrow: "Drag on the canvas to draw an arrow",
-  pen: "Drag on the canvas to draw freehand",
+  select: "Click an element in an artboard to edit it.",
+  hand: "Drag anywhere to move around. Hold Space for it from any tool.",
+  text: "Click inside an artboard to drop a text layer.",
+  note: "Click the canvas to place a sticky note.",
+  rect: "Click inside an artboard to drop a rectangle.",
+  ellipse: "Click inside an artboard to drop an ellipse.",
+  arrow: "Drag on the canvas to draw an arrow.",
+  pen: "Drag on the canvas to draw freehand.",
 };
 function setMode(m) {
+  if (readOnly && m !== "select" && m !== "hand") return;
   if (m === "frame") { addArtboard(); return; }   // one-shot action, not a mode
   mode = m;
-  toolsEl.querySelectorAll("button").forEach(b => b.classList.toggle("on", b.dataset.tool === m));
+  if (TOOLS.some(t => t[3] === "shape" && t[0] === m)) lastShape = m;
+  for (const [id, b] of Object.entries(toolBtn)) b.classList.toggle("on", id === m);
+  paintShapeBtn();
   viewport.classList.toggle("pen", m === "pen" || m === "arrow");
   viewport.classList.toggle("noting", m === "note");
-  const lbl = (TOOLS.find(t => t[0] === m) || [])[1] || "";
-  $("#hint").innerHTML = "<b>" + lbl + "</b> &middot; " + (HINT[m] || "");
-  const inFrame = ["select","text","rect","ellipse"].includes(m);
+  viewport.classList.toggle("hand", m === "hand");
+  const inFrame = IN_FRAME.includes(m) && !readOnly;
   for (const f of frames.values()) {
-    f.style.pointerEvents = inFrame ? "auto" : "none";
+    f.style.pointerEvents = inFrame || (readOnly && m !== "hand") ? "auto" : "none";
     tellAgent(f, { t: "mode", on: inFrame });
     tellAgent(f, { t: "tool", name: m === "select" ? null : m });
   }
+  if (!sel && !boardSel) drawProps();
 }
-addEventListener("keydown", (e) => {
-  if (e.target.isContentEditable || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "z") {
-    e.preventDefault(); step(!e.shiftKey); return;
+
+/* ---- keyboard ------------------------------------------------------------- */
+// One handler for keys pressed on the page and keys an artboard agent forwards to it.
+let spaceHand = null;
+function onKey(k) {
+  const mod = k.meta || k.ctrl, key = k.key, lower = (key || "").toLowerCase();
+  if (k.type === "keyup") {
+    if (key === " " && spaceHand !== null) { setMode(spaceHand); spaceHand = null; }
+    return false;
   }
-  if (e.metaKey || e.ctrlKey) return;
-  if (e.key.toLowerCase() === "p") { present(!document.body.classList.contains("present")); return; }
-  if (readOnly) return;
-  const t = TOOLS.find(t => t[2] === e.key.toLowerCase());
-  if (t) setMode(t[0]);
-  if (e.key === "Escape") { $("#focus").classList.remove("on"); deselect(); }
+  if (mod && (key === "=" || key === "+")) { zoomBy(1.25); return true; }
+  if (mod && (key === "-" || key === "_")) { zoomBy(1 / 1.25); return true; }
+  if (mod && key === "0") { zoomTo(1); return true; }
+  if (mod && lower === "s") { if (!readOnly) save(); return true; }
+  if (mod && lower === "z") { if (!readOnly) step(!k.shift); return true; }
+  if (mod || k.alt) return false;
+  if (k.shift && k.code === "Digit1") { touched = false; fit(); return true; }
+  if (k.shift && k.code === "Digit2") { zoomToSelection(); return true; }
+  if (k.shift && k.code === "Digit0") { zoomTo(1); return true; }
+  if (key === "Escape") { closeMenu(); if (isFocus() && !isPresent()) unfocus(); else deselect(); return true; }
+  if (key === " ") { if (!k.repeat && spaceHand === null && mode !== "hand") { spaceHand = mode; setMode("hand"); } return true; }
+  if (lower === "p") { present(!isPresent()); return true; }
+  if ((key === "Delete" || key === "Backspace") && boardSel && !sel && !readOnly) { deleteBoard(boardSel); return true; }
+  const t = TOOLS.find(t => t[2] === lower);
+  if (t) { setMode(t[0]); return true; }
+  return false;
+}
+const editable = (t) => t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
+addEventListener("keydown", (e) => {
+  if (isPresent()) return;   // present mode has its own keys
+  const mod = e.metaKey || e.ctrlKey;
+  if (editable(e.target) && !(mod && /^(=|\+|-|_|0|s)$/i.test(e.key))) return;
+  if (onKey({ type: "keydown", key: e.key, code: e.code, meta: e.metaKey, ctrl: e.ctrlKey,
+    shift: e.shiftKey, alt: e.altKey, repeat: e.repeat })) e.preventDefault();
 });
+addEventListener("keyup", (e) => { if (e.key === " ") onKey({ type: "keyup", key: " " }); });
+addEventListener("blur", () => { if (spaceHand !== null) { setMode(spaceHand); spaceHand = null; } });
 
 /* ---- canvas render -------------------------------------------------------- */
 const shown = new Map();     // file -> { el, src }
@@ -505,11 +649,7 @@ function render() {
   for (const [file, b] of want) {
     const rec = shown.get(file);
     if (rec) {                                   // reuse: never reload a live iframe
-      rec.el.style.left = (b.x || 0) + "px";
-      rec.el.style.top = ((b.y || 0) - 26) + "px";
-      rec.el.style.width = (b.w || 800) + "px";
-      rec.el.querySelector(".board-frame").style.height = (b.h || 600) + "px";
-      rec.el.querySelector(".nm").textContent = b.title || file.replace(/\.html$/i, "");
+      placeBoard(rec.el, b);
       if (rec.src !== files[file]) {
         rec.src = files[file];
         rec.el.querySelector("iframe").srcdoc = resolve(files[file]);
@@ -522,47 +662,79 @@ function render() {
   for (const n of notes) {
     if (!onPage(n)) continue;
     const el = document.createElement("div");
-    el.className = "note"; el.dataset.id = n.id;
-    el.style.cssText = `left:${n.x||0}px;top:${n.y||0}px;width:${n.w||240}px`;
+    el.className = "note" + (n.kind === "title" ? " title" : ""); el.dataset.id = n.id;
+    el.style.cssText = `left:${n.x||0}px;top:${n.y||0}px` + (n.kind === "title" ? "" : `;width:${n.w||240}px`);
     el.textContent = n.text || ""; wireNote(el, n); world.append(el);
   }
+  world.querySelectorAll(".board").forEach(n => n.classList.toggle("selected", n.dataset.file === boardSel && !sel));
   apply();
 }
+function placeBoard(el, b) {
+  el.style.left = (b.x || 0) + "px"; el.style.top = (b.y || 0) + "px";
+  el.style.width = (b.w || 800) + "px";
+  el.querySelector(".board-frame").style.height = (b.h || 600) + "px";
+  el.querySelector(".nm").textContent = nameOf(b);
+  const play = el.querySelector(".play"), exp = el.querySelector(".exp");
+  play.hidden = !b.interactive; exp.hidden = !!b.interactive;
+}
+// Undo swaps the board objects, so handlers look the board up by file instead of closing over it.
+const boardOf = (file) => boards.find(x => x.file === file);
 function makeBoard(b) {
-  {
-    const el = document.createElement("div");
-    el.className = "board"; el.dataset.file = b.file;
-    el.style.cssText = `left:${b.x||0}px;top:${(b.y||0)-26}px;width:${b.w||800}px`;
-    const strip = document.createElement("div");
-    strip.className = "board-strip";
-    const nm = document.createElement("div");
-    nm.className = "nm"; nm.textContent = b.title || b.file.replace(/\.html$/i, "");
-    const ic = document.createElement("div"); ic.className = "ic";
-    const bp = document.createElement("button"); bp.innerHTML = ICON.play; bp.title = "Open";
-    bp.onclick = (ev) => { ev.stopPropagation(); focusOn(b); };
-    const bd = document.createElement("button"); bd.innerHTML = ICON.down; bd.title = "Download";
-    bd.onclick = (ev) => { ev.stopPropagation(); dl(b.file); };
-    ic.append(bp, bd); strip.append(nm, ic);
-    const frame = document.createElement("div");
-    frame.className = "board-frame"; frame.style.height = (b.h || 600) + "px";
-    const f = document.createElement("iframe");
-    f.setAttribute("sandbox", "allow-scripts");
-    f.srcdoc = resolve(files[b.file]);
-    f.style.pointerEvents = ["select","text","rect","ellipse"].includes(mode) ? "auto" : "none";
-    f.addEventListener("load", () => {
-      tellAgent(f, { t: "mode", on: ["select","text","rect","ellipse"].includes(mode) });
-      askTree(b.file);
-    });
-    frames.set(b.file, f); frame.append(f);
-    el.append(strip, frame);
-    strip.addEventListener("pointerdown", (ev) => { ev.stopPropagation(); selectBoard(b.file); });
-    shown.set(b.file, { el, src: files[b.file] });
-    return el;
-  }
+  const file = b.file, cur = () => boardOf(file) || b;
+  const el = document.createElement("div");
+  el.className = "board"; el.dataset.file = b.file;
+  const strip = document.createElement("div"); strip.className = "board-strip";
+  const nm = document.createElement("div"); nm.className = "nm";
+  const ic = document.createElement("div"); ic.className = "ic";
+  const bd = document.createElement("button"); bd.innerHTML = ICON.down; bd.title = "Download HTML";
+  bd.setAttribute("aria-label", "Download HTML");
+  bd.onclick = (ev) => { ev.stopPropagation(); dl(file); };
+  const bx = document.createElement("button"); bx.className = "exp"; bx.innerHTML = ICON.expand;
+  bx.title = "Open"; bx.setAttribute("aria-label", "Open");
+  bx.onclick = (ev) => { ev.stopPropagation(); focusOn(cur()); };
+  const bp = document.createElement("button"); bp.className = "play"; bp.innerHTML = ICON.playsm + "PLAY";
+  bp.title = "Play prototype"; bp.onclick = (ev) => { ev.stopPropagation(); focusOn(cur()); };
+  for (const x of [bd, bx, bp]) x.addEventListener("pointerdown", (ev) => ev.stopPropagation());
+  ic.append(bx, bd, bp); strip.append(nm, ic);
+  const frame = document.createElement("div"); frame.className = "board-frame";
+  const f = document.createElement("iframe");
+  f.setAttribute("sandbox", "allow-scripts"); f.title = nameOf(b);
+  f.srcdoc = resolve(files[b.file]);
+  f.style.pointerEvents = (IN_FRAME.includes(mode) && !readOnly) || (readOnly && mode !== "hand") ? "auto" : "none";
+  f.addEventListener("load", () => {
+    tellAgent(f, { t: "mode", on: IN_FRAME.includes(mode) && !readOnly });
+    tellAgent(f, { t: "tool", name: mode === "select" ? null : mode });
+    askTree(b.file);
+  });
+  frames.set(b.file, f); frame.append(f);
+  el.append(strip, frame);
+  wireStrip(strip, cur);
+  shown.set(b.file, { el, src: files[b.file] });
+  placeBoard(el, b);
+  return el;
+}
+function wireStrip(strip, cur) {   // the name strip selects the artboard and drags it
+  let d = null, b = null;
+  strip.addEventListener("pointerdown", (ev) => {
+    ev.stopPropagation(); if (ev.button !== 0) return;
+    b = cur(); selectBoard(b.file);
+    if (readOnly) return;
+    d = { x: ev.clientX, y: ev.clientY, bx: b.x || 0, by: b.y || 0, moved: false };
+    mark(); strip.setPointerCapture(ev.pointerId);
+  });
+  strip.addEventListener("pointermove", (ev) => { if (!d) return;
+    const dx = (ev.clientX - d.x) / view.k, dy = (ev.clientY - d.y) / view.k;
+    if (!d.moved && Math.hypot(dx * view.k, dy * view.k) < 3) return;
+    d.moved = true; b.x = Math.round(d.bx + dx); b.y = Math.round(d.by + dy);
+    const rec = shown.get(b.file); if (rec) placeBoard(rec.el, b); });
+  const end = () => { if (d && d.moved) { commitCanvas("move artboard"); if (boardSel === b.file) drawProps(); } d = null; };
+  strip.addEventListener("pointerup", end); strip.addEventListener("pointercancel", end);
+  strip.addEventListener("dblclick", (ev) => { ev.stopPropagation(); focusOn(cur()); });
 }
 const apply = () => {
   world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.k})`;
-  $("#zoom").textContent = Math.round(view.k * 100) + "%";
+  world.style.setProperty("--k", view.k); world.style.setProperty("--inv", 1 / view.k);
+  $("#zoom-btn").innerHTML = Math.round(view.k * 100) + "%" + ICON.chevd;
 };
 
 /* ---- layer tree ----------------------------------------------------------- */
@@ -595,7 +767,8 @@ function markTree() {   // selection-only change: move the highlight, do not reb
   for (const r of treeEl.children) r.classList.toggle("on", r.dataset.k === want);
 }
 function drawTree() {
-  const sig = [...open].sort().join("|") + "#" + (pages.length ? page : "");
+  const sig = [...open].sort().join("|") + "#" + (pages.length ? page : "") + "#" +
+    boards.filter(onPage).map(b => b.file + nameOf(b) + b.w + "x" + b.h).join(",");
   if (sig === _openSig && treeEl.children.length) return markTree();
   _openSig = sig;
   treeEl.textContent = "";
@@ -605,7 +778,7 @@ function drawTree() {
     const key = b.file;
     const isOpen = open.has(key);
     treeEl.append(row({
-      depth: 0, kind: "ab", name: b.title || b.file.replace(/\.html$/i, ""),
+      depth: 0, kind: "ab", name: nameOf(b),
       right: (b.w || 800) + " × " + (b.h || 600),
       on: boardSel === b.file && !sel, hasKids: !!(t && t.kids.length), isOpen,
       onToggle: () => { isOpen ? open.delete(key) : open.add(key); drawTree(); },
@@ -653,7 +826,7 @@ function record(e) {
   hist.length = hpos; hist.push(e); hpos = hist.length;
   if (hist.length > 200) { hist.shift(); hpos--; }
 }
-const snap = () => JSON.stringify({ n: notes, d: drawings, b: boards });
+const snap = () => JSON.stringify({ n: notes, d: drawings, b: boards, p: pages });
 let base = null;
 function mark() { base = snap(); }
 function commitCanvas(label) {
@@ -665,8 +838,12 @@ function applyCanvas(json) {
   notes.length = 0; notes.push(...o.n);
   drawings.length = 0; drawings.push(...o.d);
   boards.length = 0; boards.push(...o.b);
+  pages.length = 0; pages.push(...(o.p || []));
   manifest.notes = notes; manifest.drawings = drawings; manifest.artboards = boards;
-  render(); paintInk(); drawTree();
+  if (pages.length) manifest.pages = pages;
+  if (pages.length && !pages.some(p => p.id === page)) page = pages[0].id;
+  if (!boards.some(b => b.file === boardSel)) { boardSel = null; sel = null; }
+  render(); paintInk(); drawTree(); drawProps(); paintPageBtn();
 }
 function step(back) {
   const e = back ? hist[hpos - 1] : hist[hpos];
@@ -796,9 +973,11 @@ function refreshProps(st) {
 function drawProps() {
   if (tab !== "edit") return;
   propsEl.textContent = ""; bound.clear();
+  if (!sel && boardSel) return drawBoardProps(boards.find(b => b.file === boardSel));
   if (!sel) {
     const e = document.createElement("div"); e.className = "empty";
-    e.innerHTML = "<b>Nothing selected</b>Click any element in the design to edit it here.";
+    e.innerHTML = "<b>Nothing selected</b>";
+    e.append(HINT[mode] || HINT.select);
     propsEl.append(e); return;
   }
   const st = sel.styles, inl = sel.inline || "";
@@ -882,7 +1061,59 @@ function drawProps() {
   propsEl.append(la);
 }
 
+// An artboard selected by its name strip or its tree row: frame, page and prototype settings.
+function drawBoardProps(b) {
+  if (!b) return;
+  const edit = (label, fn) => { mark(); fn(); render(); commitCanvas(label); drawTree(); drawProps(); };
+  const s = section("Artboard");
+  s.append(grp(fld({ label: "Name", value: nameOf(b), kind: "text",
+    onSet: (v) => edit("rename artboard", () => { v = v.trim(); if (v && v !== stem(b.file)) b.title = v; else delete b.title; }) })));
+  s.append(grp(
+    fld({ label: "W", value: String(b.w || 800), unit: "px", min: 40, max: 8000,
+      onSet: (v) => edit("resize artboard", () => { b.w = Math.round(parseFloat(v)); }) }),
+    fld({ label: "H", value: String(b.h || 600), unit: "px", min: 40, max: 20000,
+      onSet: (v) => edit("resize artboard", () => { b.h = Math.round(parseFloat(v)); }) })));
+  s.append(grp(
+    fld({ label: "X", value: String(b.x || 0), unit: "px",
+      onSet: (v) => edit("move artboard", () => { b.x = Math.round(parseFloat(v)); }) }),
+    fld({ label: "Y", value: String(b.y || 0), unit: "px",
+      onSet: (v) => edit("move artboard", () => { b.y = Math.round(parseFloat(v)); }) })));
+  const NEW = "+ New page";
+  const names = pages.length ? pages.map(p => p.name) : ["Page 1"];
+  s.append(grp(fld({ label: "Page", value: pages.length ? (pages.find(p => p.id === pageOf(b)) || pages[0]).name : "Page 1",
+    kind: "select", opts: [...names, NEW], onSet: (v) => {
+      mark(); ensurePages();
+      let id;
+      if (v === NEW) { let i = pages.length + 1; while (pages.some(p => p.id === "page-" + i)) i++;
+        id = "page-" + i; pages.push({ id, name: "Page " + (pages.length + 1) }); }
+      else id = (pages.find(p => p.name === v) || {}).id;
+      if (!id || id === pageOf(b)) { commitCanvas("page"); paintPageBtn(); return; }
+      b.page = id; commitCanvas("move to page"); goPage(id); selectBoard(b.file);
+    } })));
+  s.append(seg([[false, "Static"], [true, "Prototype"]], !!b.interactive,
+    (v) => edit("prototype", () => { if (v) b.interactive = true; else delete b.interactive; })));
+  const pr = document.createElement("div"); pr.className = "g"; pr.style.marginTop = "8px";
+  const pf = document.createElement("div"); pf.className = "f"; pf.style.padding = "3px 3px 3px 11px";
+  pf.append(Object.assign(document.createElement("span"), { className: "lb", textContent: "PDF" }));
+  const ps = seg([["fixed", "One page"], ["flow", "Full height"]], b.print === "flow" ? "flow" : "fixed",
+    (v) => edit("print", () => { if (v === "flow") b.print = "flow"; else delete b.print; }));
+  ps.style.cssText = "flex:1;border:0;background:none;padding:0"; pf.append(ps); pr.append(pf);
+  s.append(pr);
+  propsEl.append(s);
+  const a = section("Actions");
+  const acts = document.createElement("div"); acts.className = "acts";
+  const btn = (t, fn, cls) => { const x = document.createElement("button"); x.className = "btn" + (cls ? " " + cls : "");
+    x.textContent = t; x.onclick = fn; acts.append(x); };
+  btn(b.interactive ? "Play" : "Open", () => focusOn(b));
+  btn("Duplicate", () => duplicateBoard(b.file));
+  btn("Export PDF", () => exportPdf(b.file), "ghost");
+  btn("Download HTML", () => dl(b.file), "ghost");
+  btn("Delete", () => deleteBoard(b.file), "danger");
+  a.append(acts); propsEl.append(a);
+}
+
 /* ---- messages ------------------------------------------------------------- */
+const printWaits = new Map();
 addEventListener("message", (e) => {
   const m = e.data || {};
   let file = null;
@@ -898,9 +1129,15 @@ addEventListener("message", (e) => {
     world.querySelectorAll(".board").forEach(n => n.classList.remove("selected"));
     let key = file; open.add(key);
     for (let i = 1; i < m.path.length; i++) open.add(file + ":" + m.path.slice(0, i).join("."));
-    drawTree(); drawProps();
-  } else if (m.t === "wheel") {
-    wheel(m.dx, m.dy, m.ctrl, innerWidth / 2, innerHeight / 2);
+    showSide(true); drawTree(); drawProps();
+  } else if (m.t === "wheel" && file) {
+    const [cx, cy] = fromFrame(file, m.x, m.y);
+    wheel(m.dx, m.dy, m.mode, m.ctrl, cx, cy);
+  } else if (m.t === "gesture" && file) {
+    const [cx, cy] = fromFrame(file, m.x, m.y);
+    gesture(m.phase, m.scale, cx, cy);
+  } else if (m.t === "key" && file) {
+    if (!isPresent()) onKey(m);
   } else if (m.t === "over" && file) {
     denyEl.style.opacity = "0";
     for (const [k, fr] of frames) if (k !== file) tellAgent(fr, { t: "ghostoff" });
@@ -912,18 +1149,26 @@ addEventListener("message", (e) => {
     record({ kind: "text", file, path: m.path, prev: m.prev, next: m.next });
   } else if (m.t === "tree" || m.t === "html") {
     const r = pend.get(m.id); if (r) { pend.delete(m.id); r(m.tree !== undefined ? m.tree : m.html); }
+  } else if (m.t === "ph") {
+    const r = printWaits.get(m.i); if (r) { printWaits.delete(m.i); r(m.h); }
   }
 });
+// An artboard reports pointer positions in its own CSS px; map them to viewport px.
+function fromFrame(file, x, y) {
+  const f = frames.get(file), v = vpRect();
+  if (!f || x === undefined) return [v.width / 2, v.height / 2];
+  const r = f.getBoundingClientRect(), s = r.width / (f.offsetWidth || 1);
+  return [r.left - v.left + x * s, r.top - v.top + y * s];
+}
 
 /* ---- placement affordance ------------------------------------------------- */
 const INSERT = ["text", "rect", "ellipse"];
 const denyEl = $("#deny");
 const SHAPE_W = { text: 90, rect: 160, ellipse: 120 }, SHAPE_H = { text: 24, rect: 90, ellipse: 120 };
-let overBoard = 0;
 function denyAt(e) {
   if (!INSERT.includes(mode)) { denyEl.style.opacity = "0"; return; }
   const t = e.target;
-  if (t && t.closest && t.closest(".board-frame")) { denyEl.style.opacity = "0"; return; }
+  if (!t || !t.closest || !t.closest("#viewport") || t.closest(".board-frame")) { denyEl.style.opacity = "0"; return; }
   const w = SHAPE_W[mode] * view.k, h = SHAPE_H[mode] * view.k;
   denyEl.style.width = w + "px"; denyEl.style.height = h + "px";
   denyEl.style.left = (e.clientX - w / 2) + "px"; denyEl.style.top = (e.clientY - h / 2) + "px";
@@ -935,17 +1180,23 @@ addEventListener("pointermove", denyAt);
 addEventListener("pointerleave", () => { denyEl.style.opacity = "0"; });
 
 /* ---- pan / zoom ----------------------------------------------------------- */
-let drag = null, stroke = null, strokeEl = null;
-const wpt = (e) => [Math.round((e.clientX - view.x) / view.k), Math.round((e.clientY - view.y) / view.k)];
+let drag = null, stroke = null, strokeEl = null, _vp = null;
+const vpRect = () => _vp || (_vp = viewport.getBoundingClientRect());
+addEventListener("resize", () => { _vp = null; });
+const local = (e) => { const r = vpRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+const wpt = (e) => { const [x, y] = local(e); return [Math.round((x - view.x) / view.k), Math.round((y - view.y) / view.k)]; };
 viewport.addEventListener("pointerdown", (e) => {
-  if (mode === "pen" || mode === "arrow") { const [x, y] = wpt(e);
+  closeMenu();
+  const panAnyway = mode === "hand" || e.button === 1;
+  if (!panAnyway && (mode === "pen" || mode === "arrow")) { const [x, y] = wpt(e);
     stroke = { d: `M${x} ${y}`, x0: x, y0: y, arrow: mode === "arrow", ...(pages.length ? { page } : {}) };
-    mark(); drawings.push(stroke); viewport.setPointerCapture(e.pointerId);
+    mark(); drawings.push(stroke);
     strokeEl = mkPath(stroke); ink.append(strokeEl);            // one node, then mutate it
     viewport.setPointerCapture(e.pointerId); return; }
-  if (mode === "note" && !e.target.closest(".note")) { placeNote(e); return; }
-  if (e.target.closest(".board") || e.target.closest(".note")) return;
-  deselect();
+  if (!panAnyway && mode === "note" && !e.target.closest(".note")) { placeNote(e); return; }
+  if (!panAnyway && (e.target.closest(".board") || e.target.closest(".note"))) return;
+  if (!panAnyway) deselect();
+  e.preventDefault();
   touched = true; drag = { x: e.clientX - view.x, y: e.clientY - view.y };
   viewport.classList.add("panning"); viewport.setPointerCapture(e.pointerId);
 });
@@ -961,38 +1212,76 @@ const endDrag = () => { if (stroke) commitCanvas("ink");
   drag = null; stroke = null; strokeEl = null; viewport.classList.remove("panning"); };
 viewport.addEventListener("pointerup", endDrag);
 viewport.addEventListener("pointercancel", endDrag);
-function zoomAt(cx, cy, dy) {
-  const k = Math.min(4, Math.max(.05, view.k * Math.exp(-dy * .01)));
+
+const KMIN = 0.02, KMAX = 8;
+function zoomTo(k, cx, cy) {
+  const v = vpRect();
+  if (cx === undefined) { cx = v.width / 2; cy = v.height / 2; }
+  k = Math.min(KMAX, Math.max(KMIN, k));
   view.x = cx - (cx - view.x) * (k / view.k);
   view.y = cy - (cy - view.y) * (k / view.k);
-  view.k = k; apply();
+  view.k = k; touched = true; apply();
 }
-function wheel(dx, dy, ctrl, cx, cy) {
-  touched = true;
-  if (ctrl) return zoomAt(cx, cy, dy);          // pinch, or ctrl/cmd + wheel
-  view.x -= dx; view.y -= dy; apply();          // two fingers pans, like every canvas tool
+const zoomBy = (f, cx, cy) => zoomTo(view.k * f, cx, cy);
+// Lines and pages arrive from some mice; trackpads send pixels. One notch of a ctrl+wheel mouse
+// is clamped so it zooms a step instead of jumping several.
+function wheel(dx, dy, dmode, ctrl, cx, cy) {
+  const unit = dmode === 1 ? 16 : dmode === 2 ? vpRect().height : 1;
+  dx *= unit; dy *= unit;
+  if (ctrl) return zoomBy(Math.exp(-Math.max(-24, Math.min(24, dy)) * 0.01), cx, cy);
+  touched = true; view.x -= dx; view.y -= dy; apply();          // two fingers pan
 }
-viewport.addEventListener("wheel", (e) => {
-  e.preventDefault();
-  wheel(e.deltaX, e.deltaY, e.ctrlKey || e.metaKey, e.clientX, e.clientY);
-}, { passive: false });
+let g0 = 1;
+function gesture(phase, scale, cx, cy) {   // Safari pinch
+  if (phase === "gesturestart") g0 = view.k;
+  else if (phase === "gesturechange") zoomTo(g0 * scale, cx, cy);
+}
+// Capture on window so a pinch over the header, a toolbar or the panel still never zooms the page.
+addEventListener("wheel", (e) => {
+  const overCanvas = !!(e.target.closest && e.target.closest("#viewport"));
+  // Chrome hands a ctrl+wheel over an iframe to both documents; the artboard agent already
+  // forwards its copy, so the host only blocks page zoom here.
+  const fromBoard = e.target.tagName === "IFRAME";
+  if (e.ctrlKey || e.metaKey) {
+    e.preventDefault();
+    if (isFocus() || isPresent() || fromBoard) return;
+    const v = vpRect();
+    const [cx, cy] = overCanvas ? local(e) : [v.width / 2, v.height / 2];
+    wheel(0, e.deltaY, e.deltaMode, true, cx, cy);
+  } else if (overCanvas && !fromBoard) {
+    e.preventDefault();
+    wheel(e.deltaX, e.deltaY, e.deltaMode, false);
+  }
+}, { passive: false, capture: true });
+for (const g of ["gesturestart", "gesturechange", "gestureend"])
+  addEventListener(g, (e) => { e.preventDefault();
+    if (isFocus() || isPresent()) return;
+    const [cx, cy] = e.clientX !== undefined ? local(e) : [vpRect().width / 2, vpRect().height / 2];
+    gesture(g, e.scale, cx, cy); }, { passive: false, capture: true });
 
-function bounds() {
-  const it = [...boards.filter(onPage).map(b => ({ x: b.x||0, y: (b.y||0)-26, w: b.w||800, h: (b.h||600)+26 })),
-              ...notes.filter(onPage).map(n => ({ x: n.x||0, y: n.y||0, w: n.w||240, h: 100 }))];
+function bounds(list) {
+  const it = list || [...boards.filter(onPage).map(b => ({ x: b.x||0, y: (b.y||0)-32, w: b.w||800, h: (b.h||600)+32 })),
+              ...notes.filter(onPage).map(n => ({ x: n.x||0, y: n.y||0, w: n.kind === "title" ? 600 : n.w||240, h: 100 }))];
   if (!it.length) return null;
   return it.reduce((a, i) => ({ x1: Math.min(a.x1, i.x), y1: Math.min(a.y1, i.y),
     x2: Math.max(a.x2, i.x+i.w), y2: Math.max(a.y2, i.y+i.h) }),
     { x1: Infinity, y1: Infinity, x2: -Infinity, y2: -Infinity });
 }
-function fit() {
-  const b = bounds(); if (!b) return;
-  const side = document.body.classList.contains("no-side") ? 0 : 330;
-  const pad = 60, W = viewport.clientWidth - side - pad*2, H = viewport.clientHeight - pad*2 - 50;
-  view.k = Math.min(2, Math.max(.05, Math.min(W/(b.x2-b.x1), H/(b.y2-b.y1))));
-  view.x = pad + (W - (b.x2-b.x1)*view.k)/2 - b.x1*view.k;
-  view.y = pad + (H - (b.y2-b.y1)*view.k)/2 - b.y1*view.k;
+function fitTo(b) {
+  if (!b) return;
+  const side = document.body.classList.contains("side") ? 330 : 0, top = 64, pad = 48;
+  const W = vpRect().width - side - pad * 2, H = vpRect().height - top - pad * 2;
+  view.k = Math.min(2, Math.max(KMIN, Math.min(W / (b.x2 - b.x1), H / (b.y2 - b.y1))));
+  view.x = pad + (W - (b.x2 - b.x1) * view.k) / 2 - b.x1 * view.k;
+  view.y = top + pad + (H - (b.y2 - b.y1) * view.k) / 2 - b.y1 * view.k;
   apply();
+}
+const fit = () => fitTo(bounds());
+function zoomToSelection() {
+  const b = boards.find(x => x.file === (boardSel || (sel && sel.file)));
+  if (!b) return fit();
+  touched = true;
+  fitTo(bounds([{ x: b.x || 0, y: (b.y || 0) - 32, w: b.w || 800, h: (b.h || 600) + 32 }]));
 }
 let rt = null;
 addEventListener("resize", () => { if (touched) return; clearTimeout(rt); rt = setTimeout(fit, 120); });
@@ -1000,35 +1289,33 @@ addEventListener("resize", () => { if (touched) return; clearTimeout(rt); rt = s
 /* ---- ink ------------------------------------------------------------------ */
 function pathD(d) {
   let dd = d.d;
-    if (d.arrow && d.x1 !== undefined) {
-      const a = Math.atan2(d.y1 - d.y0, d.x1 - d.x0), L = 14;
-      dd = `M${d.x0} ${d.y0} L${d.x1} ${d.y1}` +
-        ` M${d.x1} ${d.y1} L${d.x1 - L*Math.cos(a - .4)} ${d.y1 - L*Math.sin(a - .4)}` +
-        ` M${d.x1} ${d.y1} L${d.x1 - L*Math.cos(a + .4)} ${d.y1 - L*Math.sin(a + .4)}`;
-    }
+  if (d.arrow && d.x1 !== undefined) {
+    const a = Math.atan2(d.y1 - d.y0, d.x1 - d.x0), L = 14;
+    dd = `M${d.x0} ${d.y0} L${d.x1} ${d.y1}` +
+      ` M${d.x1} ${d.y1} L${d.x1 - L*Math.cos(a - .4)} ${d.y1 - L*Math.sin(a - .4)}` +
+      ` M${d.x1} ${d.y1} L${d.x1 - L*Math.cos(a + .4)} ${d.y1 - L*Math.sin(a + .4)}`;
+  }
   return dd;
 }
 function mkPath(d) {
   const p = document.createElementNS("http://www.w3.org/2000/svg", "path");
   p.setAttribute("d", pathD(d)); p.setAttribute("fill", "none");
-  p.setAttribute("stroke", d.stroke || "#e0568c"); p.setAttribute("stroke-width", d.width || 3);
+  p.setAttribute("stroke", d.stroke || "#3d7eff"); p.setAttribute("stroke-width", d.width || 3);
   p.setAttribute("stroke-linecap", "round"); p.setAttribute("stroke-linejoin", "round");
   return p;
 }
 function paintInk() {
   ink.textContent = "";
-  for (const d of drawings) {
-    if (pages.length && (d.page || pages[0].id) !== page) continue;
-    ink.append(mkPath(d));
-  }
+  for (const d of drawings) if (onPage(d)) ink.append(mkPath(d));
 }
 
 /* ---- notes / artboards ---------------------------------------------------- */
 function wireNote(el, n) {
   let d = null;
   el.addEventListener("pointerdown", (e) => {
-    if (el.isContentEditable) return;
+    if (el.isContentEditable || mode === "hand" || e.button !== 0) return;
     e.stopPropagation();
+    if (readOnly) return;
     d = { x: e.clientX/view.k - (n.x||0), y: e.clientY/view.k - (n.y||0) };
     mark(); el.classList.add("dragging"); el.setPointerCapture(e.pointerId);
   });
@@ -1037,7 +1324,7 @@ function wireNote(el, n) {
     el.style.left = n.x + "px"; el.style.top = n.y + "px"; });
   el.addEventListener("pointerup", () => { if (d) commitCanvas("move note");
     d = null; el.classList.remove("dragging"); });
-  el.addEventListener("dblclick", (e) => { e.stopPropagation();
+  el.addEventListener("dblclick", (e) => { e.stopPropagation(); if (readOnly) return;
     el.contentEditable = "true"; el.focus(); });
   el.addEventListener("focus", mark);
   el.addEventListener("blur", () => { el.contentEditable = "false"; n.text = el.textContent;
@@ -1050,17 +1337,35 @@ function placeNote(e) {
   notes.push({ id: "note-" + i, x, y, w: 240, text: "New note", ...(pages.length ? { page } : {}) });
   render(); commitCanvas("note");
 }
+function freeName(base) {
+  let i = 1; while (files[base + i + ".html"] !== undefined) i++;
+  return base + i + ".html";
+}
 function addArtboard() {
   const b = bounds();
-  let i = 1; while (files["Artboard" + i + ".html"]) i++;
-  const name = "Artboard" + i + ".html";
+  const name = freeName("Artboard");
   files[name] = '<!doct' + 'ype html><meta charset="utf-8">' +
     '<style>body{margin:0;background:#fff;font-family:system-ui,sans-serif}</style>' +
     '<div style="padding:32px"></div>';
   mark();
-  boards.push({ file: name, x: b ? b.x2 + 80 : 0, y: b ? b.y1 + 26 : 0, w: 800, h: 600,
+  boards.push({ file: name, x: b ? b.x2 + 80 : 0, y: b ? b.y1 + 32 : 0, w: 800, h: 600,
     ...(pages.length ? { page } : {}) });
-  render(); commitCanvas("artboard"); setMode("select"); drawTree();
+  render(); commitCanvas("artboard"); setMode("select"); selectBoard(name);
+}
+function duplicateBoard(file) {
+  const b = boards.find(x => x.file === file); if (!b) return;
+  const name = freeName(stem(file).replace(/\d+$/, "") + "Copy");
+  files[name] = files[file];
+  mark();
+  boards.push({ ...b, file: name, x: (b.x || 0) + (b.w || 800) + 80,
+    ...(b.title ? { title: b.title + " copy" } : {}) });
+  render(); commitCanvas("duplicate artboard"); selectBoard(name);
+}
+// Files stay in memory so undo can bring the artboard back; Save drops the orphans.
+function deleteBoard(file) {
+  const i = boards.findIndex(x => x.file === file); if (i < 0) return;
+  mark(); boards.splice(i, 1);
+  sel = null; boardSel = null; render(); commitCanvas("delete artboard"); drawTree(); drawProps();
 }
 function dl(file) {
   const blob = new Blob([files[file]], { type: "text/html" });
@@ -1068,66 +1373,237 @@ function dl(file) {
   a.href = URL.createObjectURL(blob); a.download = file; a.click(); URL.revokeObjectURL(a.href);
 }
 
-/* ---- focus / print / save ------------------------------------------------- */
-const focusEl = $("#focus");
-function focusOn(b) {
-  focusEl.querySelectorAll("iframe").forEach(n => n.remove());
-  const f = document.createElement("iframe");
-  f.setAttribute("sandbox", "allow-scripts"); f.srcdoc = resolve(files[b.file], false);
-  focusEl.append(f); focusEl.classList.add("on");
+/* ---- pages ---------------------------------------------------------------- */
+const pageBtn = $("#page-btn");
+const pageName = () => (pages.find(p => p.id === page) || { name: "Page 1" }).name;
+function paintPageBtn() { pageBtn.innerHTML = ""; pageBtn.append(pageName()); pageBtn.insertAdjacentHTML("beforeend", ICON.chevd); }
+// A single implicit page becomes explicit the first time pages are edited: every item is
+// pinned to its page so removing or reordering pages never moves anything.
+function ensurePages() {
+  if (!pages.length) { pages.push({ id: "page-1", name: "Page 1" }); manifest.pages = pages; page = "page-1"; }
+  for (const o of [...boards, ...notes, ...drawings]) if (!o.page) o.page = pages[0].id;
 }
-$("#focus-close").onclick = () => focusEl.classList.remove("on");
-$("#print").onclick = () => {
+function goPage(id) {
+  page = id; touched = false; sel = null; boardSel = null; bcast({ t: "deselect" });
+  render(); paintInk(); drawTree(); drawProps(); paintPageBtn(); fit();
+}
+function newPage() {
+  mark(); ensurePages();
+  let i = pages.length + 1; while (pages.some(p => p.id === "page-" + i)) i++;
+  pages.push({ id: "page-" + i, name: "Page " + (pages.length + 1) });
+  commitCanvas("new page"); goPage("page-" + i);
+}
+function renamePage(id, name) {
+  name = name.trim(); if (!name) return;
+  mark(); ensurePages();
+  const p = pages.find(x => x.id === (id || pages[0].id)); if (p) p.name = name.slice(0, 60);
+  commitCanvas("rename page"); paintPageBtn();
+}
+function deletePage(id) {
+  if (pages.length < 2) return;
+  const n = boards.filter(b => pageOf(b) === id).length;
+  if (n && !confirm(`Delete "${(pages.find(p => p.id === id) || {}).name}" and its ${n} artboard${n > 1 ? "s" : ""}?`)) return;
+  mark(); ensurePages();
+  for (const list of [boards, notes, drawings])
+    for (let i = list.length - 1; i >= 0; i--) if (list[i].page === id) list.splice(i, 1);
+  pages.splice(pages.findIndex(p => p.id === id), 1);
+  commitCanvas("delete page");
+  goPage(page === id ? pages[0].id : page);
+}
+function movePage(id, by) {
+  const i = pages.findIndex(p => p.id === id), j = i + by;
+  if (i < 0 || j < 0 || j >= pages.length) return;
+  mark(); ensurePages(); [pages[i], pages[j]] = [pages[j], pages[i]];
+  commitCanvas("reorder pages");
+}
+function renameRow(id, row) {   // inline rename inside the open page menu
+  const inp = document.createElement("input"); inp.value = (pages.find(p => p.id === id) || { name: pageName() }).name;
+  inp.setAttribute("aria-label", "Page name");
+  let over = false;
+  const done = (ok) => { if (over) return; over = true; if (ok) renamePage(id, inp.value); closeMenu(); };
+  inp.onkeydown = (e) => { e.stopPropagation(); if (e.key === "Enter") done(true); if (e.key === "Escape") done(false); };
+  inp.onblur = () => done(true);
+  row.replaceWith(inp); inp.focus(); inp.select();
+}
+function pageMenu() {
+  const list = pages.length ? pages : [{ id: null, name: "Page 1" }];
+  const items = list.map((p, i) => ({
+    label: p.name, check: (p.id || null) === (page || null),
+    on: () => { if (p.id && p.id !== page) goPage(p.id); },
+    more: readOnly ? null : (anchor, rowEl) => {
+      const sub = [{ label: "Rename", on: () => { openPageMenu(); const r = menuEl.querySelectorAll(".mi")[i]; if (r) renameRow(p.id, r); } }];
+      if (pages.length > 1) {
+        if (i > 0) sub.push({ label: "Move up", on: () => { movePage(p.id, -1); openPageMenu(); } });
+        if (i < pages.length - 1) sub.push({ label: "Move down", on: () => { movePage(p.id, 1); openPageMenu(); } });
+        sub.push({ sep: 1 }, { label: "Delete page", on: () => deletePage(p.id) });
+      }
+      openMenu(rowEl, sub, { force: true });
+    },
+  }));
+  if (!readOnly) items.push({ sep: 1 }, { label: "New page", icon: ICON.plus, on: newPage });
+  return items;
+}
+const openPageMenu = () => openMenu(pageBtn, pageMenu(), { force: true });
+pageBtn.onclick = () => openMenu(pageBtn, pageMenu());
+
+/* ---- view menus ----------------------------------------------------------- */
+const zoomBtn = $("#zoom-btn");
+zoomBtn.onclick = () => openMenu(zoomBtn, [
+  { label: "Zoom in", kbd: "⌘ +", on: () => zoomBy(1.25), keep: true },
+  { label: "Zoom out", kbd: "⌘ −", on: () => zoomBy(1 / 1.25), keep: true },
+  { label: "Zoom to fit", kbd: "⇧ 1", on: () => { touched = false; fit(); } },
+  { label: "Zoom to selection", kbd: "⇧ 2", disabled: !boardSel && !sel, on: zoomToSelection },
+  { sep: 1 },
+  { label: "50%", on: () => zoomTo(.5) },
+  { label: "100%", kbd: "⇧ 0", on: () => zoomTo(1) },
+  { label: "200%", on: () => zoomTo(2) },
+], { right: true });
+const playBtn = $("#play-btn");
+playBtn.innerHTML = ICON.play;
+playBtn.onclick = () => {
+  const d = boards.filter(b => onPage(b) && files[b.file] !== undefined);
+  const proto = d.filter(b => b.interactive), stat = d.filter(b => !b.interactive);
+  const items = [];
+  if (proto.length) items.push({ head: "Prototypes" }, ...proto.map(b => ({ label: nameOf(b), on: () => focusOn(b) })));
+  if (proto.length && stat.length) items.push({ sep: 1 });
+  if (stat.length) items.push({ head: "Static artboards" }, ...stat.map(b => ({ label: nameOf(b), on: () => focusOn(b) })));
+  if (d.length) items.push({ sep: 1 }, { label: "Present this page", kbd: "P", on: () => present(true) });
+  else items.push({ label: "No artboards on this page", disabled: true });
+  openMenu(playBtn, items, { right: true });
+};
+const docBtn = $("#doc-btn");
+docBtn.insertAdjacentHTML("beforeend", ICON.chevd);
+docBtn.onclick = () => {
+  const cur = boards.find(b => b.file === (boardSel || (sel && sel.file)));
+  const items = [];
+  if (!readOnly) items.push({ label: "Save canvas", kbd: "⌘ S", on: save }, { sep: 1 });
+  items.push({ head: "Export PDF" },
+    { label: pages.length > 1 ? "This page (" + pageName() + ")" : "Whole canvas", on: () => exportPdf("page") });
+  if (pages.length > 1) items.push({ label: "All pages", on: () => exportPdf("all") });
+  if (cur) items.push({ label: "Selected artboard (" + nameOf(cur) + ")", on: () => exportPdf(cur.file) },
+    { sep: 1 }, { label: "Download " + cur.file, on: () => dl(cur.file) });
+  items.push({ sep: 1 }, { label: "Present", kbd: "P", on: () => present(true) });
+  openMenu(docBtn, items);
+};
+
+/* ---- focus / print / save ------------------------------------------------- */
+const focusEl = $("#focus"), fwrap = focusEl.querySelector(".fwrap");
+let focusFile = null;
+function focusOn(b) {
+  closeMenu(); focusFile = b.file;
+  fwrap.textContent = "";
+  const f = document.createElement("iframe");
+  f.setAttribute("sandbox", "allow-scripts allow-forms allow-modals"); f.title = nameOf(b);
+  f.srcdoc = resolve(files[b.file], false);
+  fwrap.append(f); focusEl.classList.add("on");
+  $("#focus-title").textContent = nameOf(b);
+  const d = deck(); $("#focus-prev").hidden = $("#focus-next").hidden = d.length < 2;
+}
+function unfocus() { focusEl.classList.remove("on"); fwrap.textContent = ""; focusFile = null; }
+function focusStep(by) {
+  const d = deck(), i = d.findIndex(b => b.file === focusFile);
+  if (d.length) focusOn(d[(i + by + d.length) % d.length]);
+}
+$("#focus-close").onclick = unfocus;
+$("#focus-prev").onclick = () => focusStep(-1);
+$("#focus-next").onclick = () => focusStep(1);
+
+// Each artboard prints on its own page sized to its frame, so nothing is cropped or scaled to
+// Letter. A "flow" artboard reports its full content height first and prints that tall.
+const MEASURE = (i) => "<scr" + "ipt>(()=>{const s=()=>parent.postMessage({t:'ph',i:" + i +
+  ",h:Math.ceil(Math.max(document.documentElement.scrollHeight,document.body?document.body.scrollHeight:0))},'*');" +
+  "addEventListener('load',()=>{(document.fonts?document.fonts.ready:Promise.resolve()).then(()=>setTimeout(s,80));});})()</scr" + "ipt>";
+let printing = false;
+async function exportPdf(scope) {
+  if (printing) return; printing = true;
+  const order = pages.length ? pages.map(p => p.id) : [null];
+  const list = boards.filter(b => files[b.file] !== undefined && (
+    scope === "all" ? true : scope === "page" ? onPage(b) : b.file === scope))
+    .sort((a, b) => order.indexOf(pages.length ? pageOf(a) : null) - order.indexOf(pages.length ? pageOf(b) : null));
+  if (!list.length) { printing = false; return; }
   const o = $("#print-out"); o.textContent = "";
-  for (const b of boards) {
-    if (!onPage(b) || files[b.file] === undefined) continue;
+  const css = ["@page{margin:0}"], waits = [];
+  list.forEach((b, i) => {
     const w = document.createElement("div"); w.className = "p";
     const f = document.createElement("iframe");
-    f.setAttribute("sandbox", "allow-scripts");
-    f.width = b.w || 800; f.height = b.h || 600; f.srcdoc = resolve(files[b.file], false);
+    f.setAttribute("sandbox", "allow-scripts"); f.title = nameOf(b);
+    f.width = b.w || 800; f.height = b.h || 600;
+    waits.push(new Promise((res) => { printWaits.set(i, res);
+      setTimeout(() => { if (printWaits.has(i)) { printWaits.delete(i); res(0); } }, 5000); }));
+    f.srcdoc = resolve(files[b.file], false) + MEASURE(i);
     w.append(f); o.append(w);
-  }
-  setTimeout(() => print(), 500);
-};
+  });
+  const hs = await Promise.all(waits);
+  list.forEach((b, i) => {
+    const w = b.w || 800, fixed = b.h || 600;
+    const h = b.print === "flow" ? Math.min(19000, Math.max(fixed, hs[i] || fixed)) : fixed;
+    o.children[i].style.page = "pb" + i;
+    o.children[i].firstChild.height = h;
+    css.push(`@page pb${i}{size:${w}px ${h}px;margin:0}`);
+  });
+  $("#print-pages").textContent = css.join("\n");
+  const was = document.title;
+  const label = scope === "all" ? "" : scope === "page" ? (pages.length > 1 ? " - " + pageName() : "")
+    : " - " + nameOf(list[0]);
+  document.title = (DOC.title || was) + label;   // the browser names the PDF after the title
+  const done = () => { document.title = was; printing = false; removeEventListener("afterprint", done); };
+  addEventListener("afterprint", done);
+  print();
+  setTimeout(() => { if (printing) done(); }, 1500);
+}
 const askHtml = (f) => new Promise((res) => {
   const id = ++seq; pend.set(id, res); tellAgent(f, { t: "serialize", id });
   setTimeout(() => { if (pend.has(id)) { pend.delete(id); res(null); } }, 3000);
 });
 async function save() {
+  if (readOnly) return;
   const btn = $("#t-save"), was = btn.textContent;
   btn.textContent = "Saving…"; btn.disabled = true;
   try {
     for (const [file, f] of frames) { const h = await askHtml(f); if (h) files[file] = h; }
-    const state = JSON.stringify({ title: DOC.title, files, canvas: manifest })
+    const live = new Set(boards.map(b => b.file));
+    const out = {};
+    for (const [k, v] of Object.entries(files)) if (!/\.html$/i.test(k) || live.has(k)) out[k] = v;
+    const state = JSON.stringify({ title: DOC.title, mode: DOC.mode, files: out, canvas: manifest })
       .replace(/<\/script/gi, "<\\/script").replace(/<!\x2D\x2D/g, "<\\!--");
     const c = document.documentElement.cloneNode(true);
     c.querySelector("#world").innerHTML = '<svg id="ink"></svg>';
     c.querySelector("#print-out").textContent = "";
-    c.querySelectorAll("#focus iframe").forEach(n => n.remove());
-    c.querySelector("#tools").textContent = "";
-    c.querySelector("#tree").textContent = "";
-    c.querySelector("#props").textContent = "";
+    c.querySelector("#print-pages").textContent = "";
+    c.querySelector(".fwrap").textContent = "";
+    c.querySelector("#focus").classList.remove("on");
+    for (const s of ["#tools", "#tree", "#props", "#zoom-btn", "#play-btn", "#page-btn", "#side-btn", "#side-x"])
+      c.querySelector(s).textContent = "";
+    c.querySelector("#doc-btn").innerHTML = c.querySelector("#doc-btn").querySelector("span").outerHTML;
+    c.querySelectorAll(".menu").forEach(n => n.remove());
+    c.querySelector("body").className = "";
     c.querySelector("#canvas-doc").textContent = state;
     const blob = new Blob(["<!doct" + "ype html>\n" + c.outerHTML], { type: "text/html" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = (DOC.title || "canvas").toLowerCase().replace(/[^a-z0-9]+/g, "-") + ".html";
+    a.download = (DOC.title || "canvas").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + ".html";
     a.click(); URL.revokeObjectURL(a.href);
     btn.textContent = "Saved";
   } catch (err) { btn.textContent = "Failed"; console.error(err); }
   setTimeout(() => { btn.textContent = was; btn.disabled = false; }, 1300);
 }
 $("#t-save").onclick = save;
-$("#t-toggle").innerHTML = ICON.side;
-$("#t-toggle").onclick = () => {
-  document.body.classList.toggle("no-side");
-  if (!touched) setTimeout(fit, 270);   // refit once the slide has landed
-};
-$("#tabs").onclick = (e) => { const b = e.target.closest("button"); if (!b) return;
-  $("#tabs").querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+
+/* ---- sidebar -------------------------------------------------------------- */
+const sideBtn = $("#side-btn");
+sideBtn.innerHTML = ICON.side; $("#side-x").innerHTML = ICON.x;
+function showSide(on) {
+  if (readOnly) return;
+  const was = document.body.classList.contains("side");
+  if (was === on) return;
+  document.body.classList.toggle("side", on); sideBtn.classList.toggle("on", on);
+}
+sideBtn.onclick = () => showSide(!document.body.classList.contains("side"));
+$("#side-x").onclick = () => showSide(false);
+$("#tabs").onclick = (e) => { const b = e.target.closest("button[data-tab]"); if (!b) return;
+  $("#tabs").querySelectorAll("button[data-tab]").forEach(x => x.classList.toggle("on", x === b));
   const t = tab = b.dataset.tab;
   treeEl.style.display = t === "edit" ? "" : "none";
-  toolsEl.style.display = t === "edit" ? "" : "none";
   if (t === "edit") drawProps();
   else if (t === "code") drawCode();
   else drawTweaks();
@@ -1143,27 +1619,25 @@ function drawCode() {
   if (!file) return note("<b>Code</b>Select an artboard first.");
   const f = frames.get(file);
   propsEl.textContent = "";
-  const sec = section(file.replace(/\.html$/i, ""));
+  const sec = section(stem(file));
   const ta = document.createElement("textarea");
   ta.style.cssText = "min-height:52vh;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace";
   ta.spellcheck = false; ta.value = files[file];
   const bar = document.createElement("div"); bar.className = "g"; bar.style.marginTop = "8px";
-  const apply = document.createElement("button");
-  apply.className = "btn"; apply.textContent = "Apply";
-  apply.onclick = () => { if (ta.value === files[file]) return;
-    mark0(file); files[file] = ta.value; _rcache.clear(); render(); askTree(file);
-    record({ kind: "src", file, prev: srcPrev, next: ta.value });
-    apply.textContent = "Applied"; setTimeout(() => apply.textContent = "Apply", 1100); };
+  const ap = document.createElement("button");
+  ap.className = "btn"; ap.textContent = "Apply";
+  ap.onclick = () => { if (ta.value === files[file]) return;
+    const prev = files[file]; files[file] = ta.value; _rcache.clear(); render(); askTree(file);
+    record({ kind: "src", file, prev, next: ta.value });
+    ap.textContent = "Applied"; setTimeout(() => ap.textContent = "Apply", 1100); };
   const rev = document.createElement("button");
   rev.className = "btn ghost"; rev.textContent = "Revert";
   rev.onclick = () => { ta.value = files[file]; };
-  bar.append(apply, rev);
+  bar.append(ap, rev);
   sec.append(ta, bar); propsEl.append(sec);
   if (f) { const id = ++seq; pend.set(id, (html) => { if (html) { ta.value = html; } });
     tellAgent(f, { t: "src", id }); }
 }
-let srcPrev = "";
-const mark0 = (file) => { srcPrev = files[file]; };
 
 function drawTweaks() {
   const file = pickFile();
@@ -1189,9 +1663,6 @@ function drawTweaks() {
   });
   tellAgent(f, { t: "vars", id });
 }
-$("#zoom-in").onclick = () => { touched = true; view.k = Math.min(4, view.k*1.25); apply(); };
-$("#zoom-out").onclick = () => { touched = true; view.k = Math.max(.05, view.k/1.25); apply(); };
-$("#fit").onclick = () => { touched = false; fit(); };
 
 /* ---- present mode --------------------------------------------------------- */
 let slide = -1;
@@ -1200,50 +1671,41 @@ function showSlide(i) {
   const d = deck(); if (!d.length) return;
   slide = (i + d.length) % d.length;
   const b = d[slide];
-  focusEl.querySelectorAll("iframe").forEach(n => n.remove());
+  fwrap.textContent = "";
   const f = document.createElement("iframe");
-  f.setAttribute("sandbox", "allow-scripts");
+  f.setAttribute("sandbox", "allow-scripts"); f.title = nameOf(b);
   f.srcdoc = resolve(files[b.file], false);
   const pad = 68, maxW = innerWidth - pad, maxH = innerHeight - pad - 40;
   const k = Math.min(maxW / (b.w || 800), maxH / (b.h || 600), 1.6);
   f.style.width = Math.round((b.w || 800) * k) + "px";
   f.style.height = Math.round((b.h || 600) * k) + "px";
-  focusEl.append(f);
+  fwrap.append(f);
   $("#slide-n").textContent = (slide + 1) + " / " + d.length;
 }
 function present(on) {
+  closeMenu();
   document.body.classList.toggle("present", on);
   focusEl.classList.toggle("on", on);
   if (on) { showSlide(slide < 0 ? 0 : slide); }
-  else { slide = -1; focusEl.querySelectorAll("iframe").forEach(n => n.remove()); }
+  else { slide = -1; fwrap.textContent = ""; }
 }
 $("#s-next").onclick = () => showSlide(slide + 1);
 $("#s-prev").onclick = () => showSlide(slide - 1);
 $("#s-exit").onclick = () => present(false);
-addEventListener("resize", () => { if (document.body.classList.contains("present")) showSlide(slide); });
+addEventListener("resize", () => { if (isPresent()) showSlide(slide); });
 addEventListener("keydown", (e) => {
-  if (!document.body.classList.contains("present")) return;
+  if (!isPresent()) return;
   if (e.key === "ArrowRight" || e.key === " " || e.key === "PageDown") {
     e.preventDefault(); showSlide(slide + 1); }
   else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); showSlide(slide - 1); }
   else if (e.key === "Escape") present(false);
 }, true);
 
-/* ---- pages / boot --------------------------------------------------------- */
-const pagesSel = $("#pages");
-if (pages.length) {
-  for (const p of pages) { const o = document.createElement("option");
-    o.value = p.id; o.textContent = p.name; pagesSel.append(o); }
-  pagesSel.hidden = false; $("#pages-sep").hidden = false;
-  pagesSel.onchange = () => { page = pagesSel.value; touched = false;
-    render(); paintInk(); drawTree(); fit(); };
-}
-const readOnly = DOC.mode === "view";
+/* ---- boot ----------------------------------------------------------------- */
 if (readOnly) { document.body.classList.add("view"); $("#t-save").remove(); }
-$("#t-present").onclick = () => present(true);
 const launch = manifest.launch || { view: "canvas" };
-page = pages.length ? (launch.page || pages[0].id) : null;
-if (pages.length) pagesSel.value = page;
+page = pages.length ? (pages.some(p => p.id === launch.page) ? launch.page : pages[0].id) : null;
+paintPageBtn();
 setMode("select");
 render(); paintInk(); drawTree(); drawProps();
 if (launch.view === "focused" && files[launch.file])

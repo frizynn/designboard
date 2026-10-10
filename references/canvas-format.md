@@ -58,7 +58,12 @@ Optional per-artboard keys:
 1-40 chars (letters, digits, `-`, `_`). `x`/`y`/`w` in canvas px, width 120-2000; height auto-fits,
 so no `h`. `text` is one plain string - use `\n` for newlines, never an array.
 
-**pages** - splits the canvas into named sets the viewer flips between. At most 40, each exactly
+`"kind": "title"` turns a note into a section title: one bold 72 px line, no paper, no `w`. Use it
+to name a row of **several** artboards, never one. Put it at least ~220 px above its row so it
+clears the name strips, and keep the space under it empty.
+
+**pages** - splits the canvas into named sets the viewer flips between, and can also add, rename,
+reorder and delete from the page menu. At most 40, each exactly
 `{id, name}`. Artboards and notes join one with `"page": "<id>"`; anything without a `page` belongs
 to `pages[0]`. Omit `pages` entirely for a single-page canvas - do not add it just to name one page.
 

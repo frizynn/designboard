@@ -130,19 +130,31 @@ The chrome follows a small motion contract; keep it if you touch the template.
   broken even when it worked.
 - **Hover lives behind `@media (hover:hover) and (pointer:fine)`** so touch never strands a hover
   state, and everything collapses under `prefers-reduced-motion: reduce`.
-- **Two fingers pan, pinch zooms.** A plain wheel translates the canvas; `ctrl`/`cmd` + wheel
-  scales it. Artboard iframes swallow wheel events, so the injected agent intercepts them and
-  forwards the deltas to the host - otherwise the canvas freezes whenever the cursor is over a
-  design.
+- **Two fingers pan, pinch zooms at the cursor.** A plain wheel translates the canvas; `ctrl`/`cmd`
+  + wheel scales it around the point under the cursor. The host listens on `window` in the capture
+  phase and cancels every `ctrl` + wheel and Safari `gesture*` event, so a pinch over the header,
+  a toolbar or the panel never zooms the browser page. Artboard iframes swallow wheel events, so
+  the injected agent forwards the deltas *and the cursor position*; the host maps that position
+  through the iframe's on-screen scale. Chrome also hands a `ctrl` + wheel over an iframe to the
+  host document: ignore that copy or the zoom doubles. Mouse wheels in line mode are converted to
+  pixels and one notch is clamped to a single zoom step.
+- **Canvas shortcuts work from inside an artboard.** The agent forwards `⌘ +/−/0/S/Z`, Space and
+  the tool keys (outside editable fields) so the browser never zooms and the tools still switch
+  after a click lands inside a design.
 - **`render()` is a diff, never a rebuild.** Boards are reused by filename and only get a new
   `srcdoc` when their source actually changed. Re-seeding every iframe on each change looked like
   the page reloading, and threw away scroll position, selection and agent state.
-- **Insert tools show where they will land.** Inside an artboard the agent draws a rose ghost of
+- **Insert tools show where they will land.** Inside an artboard the agent draws a blue ghost of
   the shape at the cursor; outside one the host draws a grey "Drop inside an artboard" ghost. Only
   the artboard under the cursor shows its ghost - the others are told to hide.
 - **The sidebar slides on `transform`, never on width.** It is absolutely positioned over the
   stage precisely so the toggle costs no layout: the stage holds live iframes, and reflowing them
-  every frame would drop the animation. `fit()` subtracts the sidebar width when it is open.
+  every frame would drop the animation. The top-right pill slides with it on `transform`, and
+  `fit()` subtracts the sidebar width when it is open.
+- **Name strips stay one size.** They counter-scale with `--inv` (1 / zoom) so a label reads the
+  same at 10% and at 200%; never put readable chrome inside the world transform without it.
+- **Handlers look boards up by file.** Undo replaces the manifest objects, so a closure that kept
+  the old board object would edit a ghost.
 - **Every numeric field validates, clamps and reverts.** Opacity is 0-1, radius and gap are >= 0,
   font size 1-400, and keywords (`auto`, `normal`, `100%`, `fit-content`) are accepted per property.
   Letters revert to the last good value and flash rose. Arrow keys nudge by the field's step, shift
@@ -162,6 +174,24 @@ The rules above are format. The craft is in the references - read the one that m
 | `references/print.md` | Posters, flyers, brochures, documents |
 | `references/canvas-format.md` | Artboard file format and `canvas.json` |
 
+Five that decide whether a draft looks finished or generated:
+
+- **Pages are fluid, mockups are fixed.** A web page, dashboard or app screen gets a fluid root
+  (no px width, a `max-width` container, `%`/`fr`/`rem`, heights in px or rem) so it survives
+  any frame width and a phone width; set the frame `h` to its height at `w` (1280-1440 wide). Only
+  device mockups, posters, social posts and print pieces get a root fixed at `w` x `h`.
+- **Accessible as drawn.** Real `<button>`, `<a href>`, `<input>` with `<label>` even in a static
+  mockup, never a clickable `div`; `aria-label` on icon-only buttons; decorative SVG
+  `aria-hidden="true"`. Text contrast 4.5:1 (3:1 from 24px); grey captions and fills under white
+  text fail most often, darken both. Colours that must be told apart also differ in lightness.
+- **Reasoning stays in your reply.** Rationale, option notes and "why this layout" never go inside
+  an artboard; the artboard is the design only. Name a row of several artboards with a title note
+  (`"kind": "title"`), never a single one - its name strip already names it.
+- **Mark prototypes.** An artboard with working controls gets `"interactive": true`, which gives it
+  a PLAY button and lists it under Prototypes.
+- **Watch your own habits.** Cream grounds, a serif display face and a clay accent are a default,
+  not a choice: use them only when the brief or brand asks.
+
 Two that override everything else:
 
 - **Do not add filler.** Never pad a design with placeholder text, dummy sections or invented
@@ -173,20 +203,37 @@ Two that override everything else:
 
 ## Editing on the canvas
 
-The canvas is a right-hand sidebar over a dark stage: **Edit / Code / Tweaks** tabs, a row of eight
-tools, a layer tree, and property sections.
+The layout follows the current Claude Design canvas: a header with the canvas title (its menu
+holds Save, Export PDF and Present) and Save; a **tools pill** top left; a **view pill** top right;
+and a **properties panel** on the right that opens from the view pill or on its own when you
+click an element inside an artboard.
 
-Tools, with their keys: **Select** (V), **Text** (T), **Artboard** (F), **Note** (N),
-**Rectangle** (R), **Ellipse** (O), **Arrow** (A), **Draw** (D). Select, Text, Rectangle and
-Ellipse act inside an artboard; the rest act on the canvas. Dragging empty canvas pans.
+**Tools pill**: the page menu, then **Select** (V), **Hand** (H), **Text** (T), **Artboard** (F),
+**Note** (N), **Draw** (D) and a shapes menu with **Rectangle** (R), **Ellipse** (O) and **Arrow**
+(A). Hold Space for the Hand from any tool. Select, Text, Rectangle and Ellipse act inside an
+artboard; the rest act on the canvas. Dragging empty canvas pans.
 
-The layer tree names containers the way a design tool does - **Row**, **Column**, **Grid**,
-**group** - from their computed display and flex direction, and shows a text leaf by its own text.
-Artboard rows carry their pixel size, element rows their tag. Selecting in the tree selects in the
-artboard, and vice versa.
+**Page menu**: switch pages, `+ New page`, and per page (the `···` button) Rename, Move up, Move
+down and Delete page. A canvas without `pages` shows one implicit "Page 1"; the first edit makes
+pages explicit and pins every item to its page.
+
+**View pill**: **Play** lists prototypes (`"interactive": true`) and static artboards and opens one
+full window, plus Present this page; the panel toggle; and the zoom menu: Zoom in `⌘ +`, Zoom out
+`⌘ −`, Zoom to fit `⇧ 1`, Zoom to selection `⇧ 2`, 50%, 100% (`⌘ 0` / `⇧ 0`) and 200%.
+
+**Artboards**: the name strip selects one and drags it; double-click opens it. Prototypes show a
+`PLAY` button, static artboards an open icon, both with a download. A selected artboard's panel
+edits its name, size, position, page, Static or Prototype, PDF mode (one page or full height),
+and offers Play, Duplicate, Export PDF, Download HTML and Delete (also `Delete` / `Backspace`).
+All of it undoes.
+
+The panel's tabs are **Properties / Code / Tweaks**. The layer tree names containers the way a
+design tool does - **Row**, **Column**, **Grid**, **group** - from their computed display and flex
+direction, and shows a text leaf by its own text. Artboard rows carry their pixel size, element
+rows their tag. Selecting in the tree selects in the artboard, and vice versa.
 
 Two affordances carry the selection, both drawn by the agent inside the artboard so they follow
-the element exactly: **hover** is a dashed rose outline, **selection** is a solid one with corner
+the element exactly: **hover** is a dashed blue outline, **selection** is a solid one with corner
 handles. Both take the element's own border-radius plus their offset, so they hug a rounded button
 instead of boxing it.
 
@@ -196,8 +243,14 @@ inherited.
 
 Selection works by an agent injected into each artboard's iframe - the host cannot reach across the
 opaque origin, so every edit travels by postMessage. The panel edits inline styles (text, box,
-layout) and the text of leaf elements. **Save** serialises every artboard back out of its iframe,
-strips the agent, and downloads an updated canvas file - re-seed from it, or keep it as is.
+layout) and the text of leaf elements. **Save** (`⌘ S`) serialises every artboard back out of its
+iframe, strips the agent, drops the files of deleted artboards, and downloads an updated canvas
+file - re-seed from it, or keep it as is.
+
+**Export PDF** prints each artboard on a sheet of its own size (named `@page` rules), so nothing is
+cropped or shrunk to Letter. A `"print": "flow"` artboard reports its content height first and
+prints that tall. Scope: the selected artboard, this page, or all pages in page order. The browser
+dialog does the saving; the PDF is named after the canvas and page.
 
 **Never emit the literal `<!--` or `<script` inside the canvas's own script block.** Together they
 put the HTML parser into script-data-double-escaped state, `</script>` stops closing the block, the
@@ -220,18 +273,22 @@ These are the paths that actually get hot; keep them that way.
 ## Modes
 
 - **Edit** (default) - the full sidebar and tools.
-- **Present** (`P`, or the Present button) - one artboard at a time, scaled to the window, arrows
-  or space to move, Escape to leave. A deck is just a series of same-size artboards; there is no
-  separate slide format.
-- **View** (`--mode view` at seed time) - a read-only canvas: no sidebar, no tools, no Save. Pan,
-  zoom, Present and Export PDF still work. Use it for the copy you hand to someone else.
+- **Play** (the view pill, a `PLAY` button, or double-clicking a name strip) - one artboard full
+  window with its scripts live, arrows to step through the page, Escape to close.
+- **Present** (`P`) - one artboard at a time, scaled to the window, arrows or space to move,
+  Escape to leave. A deck is just a series of same-size artboards; there is no separate slide
+  format.
+- **View** (`--mode view` at seed time) - a read-only canvas: no panel, no editing tools, no Save.
+  Pan, zoom, pages, Play, Present and Export PDF still work. Use it for the copy you hand to
+  someone else.
 
 ## Known limits
 
-- The panel edits one element at a time. No multi-select, and the corner handles are drawn but do
-  not resize yet.
-- Undo/redo covers style and text edits (200 steps). It does not cover notes, ink, or artboards.
+- The panel edits one element at a time. No multi-select. Corner handles resize width and height
+  only.
+- Undo/redo (200 steps) covers style, text and source edits, notes, ink, artboards and pages.
 - Export PDF goes through the browser's print dialog. There is no per-artboard PNG export.
+- Elements inside an artboard cannot be dragged or deleted from the canvas yet; use Code.
 
 - Webfonts load from Google Fonts by `<link>`. Anything else must be a `@font-face` data: URI
   inside the artboard.

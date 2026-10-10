@@ -105,6 +105,7 @@ for (const n of canvas.notes || []) {
   noteIds.add(n.id);
   if (typeof n.text !== "string") die(`note "${n.id}" text must be one plain string`);
   if (n.w != null && (n.w < 120 || n.w > 2000)) die(`note "${n.id}" width must be 120-2000`);
+  if (n.kind != null && n.kind !== "title") die(`note "${n.id}" kind must be "title" or absent`);
   checkPage(n, `note ${n.id}`);
 }
 if (canvas.launch) {
@@ -130,6 +131,8 @@ for (const name of Object.keys(files)) {
 const bs = canvas.artboards || [];
 for (let i = 0; i < bs.length; i++) for (let j = i + 1; j < bs.length; j++) {
   const a = bs[i], b = bs[j];
+  const pg = (o) => o.page || (canvas.pages && canvas.pages[0] ? canvas.pages[0].id : "");
+  if (pg(a) !== pg(b)) continue;                // different pages never share the stage
   const ov = (a.x||0) < (b.x||0)+(b.w||800) && (b.x||0) < (a.x||0)+(a.w||800)
           && (a.y||0)-26 < (b.y||0)+(b.h||600) && (b.y||0)-26 < (a.y||0)+(a.h||600);
   if (ov) warn(`artboards ${a.file} and ${b.file} overlap on the canvas`);

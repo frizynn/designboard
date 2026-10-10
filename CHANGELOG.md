@@ -4,6 +4,37 @@ All notable changes to Designboard are documented in this file.
 
 The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- The canvas chrome follows the current Claude Design layout: a tools pill top left with the
+  page menu, a play, panel and zoom pill top right, and a properties panel that opens on demand.
+  The bottom zoom bar is gone.
+- Selection and ink use one blue accent instead of rose.
+
+### Added
+
+- Pages can be created, renamed, reordered and deleted from the page menu, and an artboard can
+  move between pages from its properties.
+- Artboard properties: name, size, position, page, prototype flag, PDF mode, duplicate, delete.
+- Artboards drag by their name strip; name strips stay legible at any zoom.
+- Zoom menu (fit, selection, 50/100/200%), `⌘ +`, `⌘ −`, `⌘ 0`, `⇧ 1`, `⇧ 2`, a Hand tool (`H`)
+  and Space to pan from any tool.
+- Play menu listing prototypes and static artboards, and a PLAY button on each prototype.
+- PDF export of the selected artboard, the current page or all pages.
+- Section title notes (`"kind": "title"`).
+
+### Fixed
+
+- A pinch or `⌘` + wheel over the header, toolbars or panel zoomed the whole browser page.
+- Pinch over an artboard zoomed around the window centre instead of the cursor.
+- The zoom buttons zoomed around the canvas origin, throwing the view off screen.
+- PDF export printed the page chrome on one Letter sheet. Each artboard now prints on a sheet of
+  its own size, and `"print": "flow"` artboards print their full height.
+- The seeder warned about overlaps between artboards on different pages.
+- A literal `$&` in an artboard expanded during seeding.
+
 ## [0.1.0] - 2026-09-07
 
 ### Added

@@ -70,13 +70,13 @@ network connection. Embed assets when the final canvas must work fully offline.
 
 | Area | Capabilities |
 |---|---|
-| Canvas | Infinite pan and zoom, fit-to-view, pages, focus mode, notes, freehand ink, and arrows |
+| Canvas | Trackpad pan and pinch zoom anchored to the cursor, zoom menu and shortcuts, pages you create, rename, reorder and delete in the canvas, draggable artboards, section titles, notes, freehand ink, and arrows |
 | Editor | Element selection, resize handles, a semantic layer tree, and inline property controls |
 | Code | Live editing of each artboard's real HTML source |
 | Tweaks | Editing for CSS custom properties exposed by the artboard |
 | History | Up to 200 undo and redo steps for visual and source changes |
-| Present | Full-window presentation of one artboard at a time |
-| Export | Save as a portable HTML file or export through the browser's PDF pipeline |
+| Play and present | Open any artboard full window, play prototypes, or present a page as a deck |
+| Export | Save as a portable HTML file, or a PDF of one artboard, one page or every page, each artboard on a sheet of its own size |
 
 ## Build a canvas directly
 
@@ -148,7 +148,7 @@ See [SECURITY.md](SECURITY.md) for supported versions and private vulnerability 
 - One element can be selected at a time.
 - Elements cannot yet be dragged to move them.
 - Undo history does not survive a page reload.
-- PDF export uses the browser's print pipeline.
+- PDF export goes through the browser's print dialog; pick "Save as PDF" there.
 - Per-artboard PNG export is not yet available.
 
 ## Contributing
