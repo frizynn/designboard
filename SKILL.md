@@ -211,7 +211,8 @@ Two that override everything else:
 ## Editing on the canvas
 
 The layout follows the current Claude Design canvas: a header with the canvas title (its menu
-holds Save, Export PDF and Present) and Save; a **tools pill** top left; a **view pill** top right;
+holds Save, Export PDF and Present) and a **Save** button that asks for the format - the editable
+HTML canvas (also `⌘ S`) or a PDF of this page, all pages or the selected artboard; a **tools pill** top left; a **view pill** top right;
 and a **properties panel** on the right that opens from the view pill or on its own when you
 click an element inside an artboard.
 

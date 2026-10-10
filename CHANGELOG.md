@@ -15,6 +15,8 @@ The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Save asks for the format: the editable HTML canvas (`⌘ S` still saves it directly) or a PDF of
+  this page, all pages or the selected artboard.
 - Pages can be created, renamed, reordered and deleted from the page menu, and an artboard can
   move between pages from its properties.
 - Artboard properties: name, size, position, page, prototype flag, PDF mode, duplicate, delete.

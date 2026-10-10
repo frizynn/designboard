@@ -32,7 +32,11 @@
     font-size:15px;color:var(--ink);max-width:50vw}
   #doc-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #doc-btn svg{color:var(--muted);flex:none}
-  #t-save{padding:6px 14px;border-radius:8px;background:var(--ink);color:#151515;font-weight:500}
+  #t-save{display:flex;align-items:center;gap:6px;padding:6px 10px 6px 14px;border-radius:8px;
+    background:var(--ink);color:#151515;font-weight:500;
+    transition:background var(--t-hover) var(--ease),transform var(--t-tap) var(--ease-out)}
+  #t-save:active{transform:scale(.97)}
+  #t-save .cv{color:#555}
   #t-save:disabled{opacity:.6}
 
   #stage{position:absolute;top:var(--head-h);left:0;right:0;bottom:0;overflow:hidden}
@@ -244,7 +248,7 @@
   <header id="head">
     <button id="doc-btn" aria-haspopup="menu"><span id="doc-title">__CANVAS_TITLE__</span></button>
     <span class="sp"></span>
-    <button id="t-save" class="edit-only">Save</button>
+    <button id="t-save" class="edit-only" aria-haspopup="menu"><span>Save</span></button>
   </header>
   <div id="stage">
     <div id="viewport"><div id="world"><svg id="ink"></svg></div></div>
@@ -1499,15 +1503,22 @@ playBtn.onclick = () => {
 };
 const docBtn = $("#doc-btn");
 docBtn.insertAdjacentHTML("beforeend", ICON.chevd);
+const selectedBoard = () => boards.find(b => b.file === (boardSel || (sel && sel.file)));
+// The PDF choices both menus offer: this page (or the whole canvas), every page, the selection.
+function pdfItems() {
+  const cur = selectedBoard();
+  const items = [{ head: "PDF" },
+    { label: pages.length > 1 ? "This page (" + pageName() + ")" : "Whole canvas", on: () => exportPdf("page") }];
+  if (pages.length > 1) items.push({ label: "All pages", on: () => exportPdf("all") });
+  if (cur) items.push({ label: "Selected artboard (" + nameOf(cur) + ")", on: () => exportPdf(cur.file) });
+  return items;
+}
 docBtn.onclick = () => {
-  const cur = boards.find(b => b.file === (boardSel || (sel && sel.file)));
+  const cur = selectedBoard();
   const items = [];
   if (!readOnly) items.push({ label: "Save canvas", kbd: "⌘ S", on: save }, { sep: 1 });
-  items.push({ head: "Export PDF" },
-    { label: pages.length > 1 ? "This page (" + pageName() + ")" : "Whole canvas", on: () => exportPdf("page") });
-  if (pages.length > 1) items.push({ label: "All pages", on: () => exportPdf("all") });
-  if (cur) items.push({ label: "Selected artboard (" + nameOf(cur) + ")", on: () => exportPdf(cur.file) },
-    { sep: 1 }, { label: "Download " + cur.file, on: () => dl(cur.file) });
+  items.push(...pdfItems());
+  if (cur) items.push({ sep: 1 }, { label: "Download " + cur.file, on: () => dl(cur.file) });
   items.push({ sep: 1 }, { label: "Present", kbd: "P", on: () => present(true) });
   openMenu(docBtn, items);
 };
@@ -1586,8 +1597,8 @@ const askHtml = (f) => new Promise((res) => {
 async function save() {
   if (readOnly) return;
   if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();   // commit a note or field mid-edit
-  const btn = $("#t-save"), was = btn.textContent;
-  btn.textContent = "Saving…"; btn.disabled = true;
+  const btn = $("#t-save"), lbl = btn.querySelector("span");
+  lbl.textContent = "Saving…"; btn.disabled = true;
   try {
     await sync();
     const live = new Set(boards.map(b => b.file));
@@ -1606,7 +1617,7 @@ async function save() {
     c.querySelector("#doc-btn").innerHTML = c.querySelector("#doc-btn").querySelector("span").outerHTML;
     c.querySelectorAll(".menu").forEach(n => n.remove());
     c.querySelector("body").className = "";
-    const sv = c.querySelector("#t-save"); sv.removeAttribute("disabled"); sv.textContent = "Save";
+    const sv = c.querySelector("#t-save"); sv.removeAttribute("disabled"); sv.innerHTML = "<span>Save</span>";
     c.querySelector("#tree").removeAttribute("style"); c.querySelector("#side-btn").classList.remove("on");
     c.querySelectorAll("#tabs button[data-tab]").forEach(t => t.classList.toggle("on", t.dataset.tab === "edit"));
     c.querySelector("#canvas-doc").textContent = state;
@@ -1615,11 +1626,17 @@ async function save() {
     a.href = URL.createObjectURL(blob);
     a.download = (DOC.title || "canvas").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + ".html";
     a.click(); URL.revokeObjectURL(a.href);
-    btn.textContent = "Saved";
-  } catch (err) { btn.textContent = "Failed"; console.error(err); }
-  setTimeout(() => { btn.textContent = was; btn.disabled = false; }, 1300);
+    lbl.textContent = "Saved";
+  } catch (err) { lbl.textContent = "Failed"; console.error(err); }
+  setTimeout(() => { lbl.textContent = "Save"; btn.disabled = false; }, 1300);
 }
-$("#t-save").onclick = save;
+// Save asks for the format: the editable HTML canvas (also ⌘ S) or a PDF.
+const saveBtn = $("#t-save");
+saveBtn.insertAdjacentHTML("beforeend", ICON.chevd);
+saveBtn.onclick = () => openMenu(saveBtn, [
+  { head: "HTML" }, { label: "Editable canvas", kbd: "⌘ S", on: save },
+  { sep: 1 }, ...pdfItems(),
+], { right: true });
 
 /* ---- sidebar -------------------------------------------------------------- */
 const sideBtn = $("#side-btn");
