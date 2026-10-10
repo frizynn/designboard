@@ -94,6 +94,9 @@ const tpl = readFileSync(TPL, "utf8");
 ok("template has the page menu and no bottom zoom bar", tpl.includes('id="page-btn"') && !tpl.includes('id="bar"'));
 ok("template blocks browser zoom from every surface", /addEventListener\("wheel"[\s\S]{0,900}capture: true/.test(tpl));
 ok("template prints each artboard on its own sheet", tpl.includes("@page pb"));
+ok("artboards on the canvas take no pointer input", /\.board-frame iframe\{[^}]*pointer-events:none/.test(tpl));
+ok("the artboard agent listens to no wheel or pointer events of its own",
+  !/addEventListener\('(wheel|click|mousemove|mouseover|pointerdown|keydown)'/.test(tpl));
 
 rmSync(dir, { recursive: true, force: true });
 console.log(`\n${pass} passed, ${fail} failed\n`);

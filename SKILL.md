@@ -130,17 +130,24 @@ The chrome follows a small motion contract; keep it if you touch the template.
   broken even when it worked.
 - **Hover lives behind `@media (hover:hover) and (pointer:fine)`** so touch never strands a hover
   state, and everything collapses under `prefers-reduced-motion: reduce`.
-- **Two fingers pan, pinch zooms at the cursor.** A plain wheel translates the canvas; `ctrl`/`cmd`
-  + wheel scales it around the point under the cursor. The host listens on `window` in the capture
-  phase and cancels every `ctrl` + wheel and Safari `gesture*` event, so a pinch over the header,
-  a toolbar or the panel never zooms the browser page. Artboard iframes swallow wheel events, so
-  the injected agent forwards the deltas *and the cursor position*; the host maps that position
-  through the iframe's on-screen scale. Chrome also hands a `ctrl` + wheel over an iframe to the
-  host document: ignore that copy or the zoom doubles. Mouse wheels in line mode are converted to
-  pixels and one notch is clamped to a single zoom step.
-- **Canvas shortcuts work from inside an artboard.** The agent forwards `⌘ +/−/0/S/Z`, Space and
-  the tool keys (outside editable fields) so the browser never zooms and the tools still switch
-  after a click lands inside a design.
+- **Artboards never take input on the canvas.** Their iframes are `pointer-events: none`; the host
+  owns every pointer, wheel, pinch and key event and sends the artboard agent hover, press, drag
+  and release as `{t:'ptr'}` messages in the artboard's own CSS px (through the iframe's on-screen
+  scale). The agent hit-tests with `elementFromPoint` and its resize handles by geometry. Never
+  hand input back to the iframes: Chromium runs sandboxed iframes in their own process, where a
+  trackpad pinch is delivered to the host as a `ctrl` + wheel aimed at the `<iframe>` element and
+  never reaches the artboard, and two-finger scroll forwarded across processes drops part of the
+  gesture. Bundled headless Chromium keeps those frames in process and hides both bugs, so test
+  input in the user's real browser engine, through `Input.synthesizePinchGesture` and
+  `Input.synthesizeScrollGesture`, not plain wheel events.
+- **Two fingers pan, pinch zooms at the cursor, one paint per frame.** A plain wheel translates the
+  canvas; `ctrl`/`cmd` + wheel scales it around the cursor by `exp(-deltaY / 100)`, which tracks a
+  trackpad pinch 1:1. The host listens on `window` in the capture phase and cancels every `ctrl` +
+  wheel and Safari `gesture*` event, so a pinch over the header, a toolbar or the panel never zooms
+  the browser page. Wheel events only update the view; one `requestAnimationFrame` writes the
+  transform, the zoom label and `--k`/`--inv` change only with the zoom, and `will-change` is on
+  only while the canvas moves so it re-rasters crisp when it stops. Interactive artboards are
+  used through Play, where their iframe does take input.
 - **`render()` is a diff, never a rebuild.** Boards are reused by filename and only get a new
   `srcdoc` when their source actually changed. Re-seeding every iframe on each change looked like
   the page reloading, and threw away scroll position, selection and agent state.
@@ -217,6 +224,8 @@ artboard; the rest act on the canvas. Dragging empty canvas pans.
 down and Delete page. A canvas without `pages` shows one implicit "Page 1"; the first edit makes
 pages explicit and pins every item to its page.
 
+The properties panel starts open and remembers being closed (`localStorage`).
+
 **View pill**: **Play** lists prototypes (`"interactive": true`) and static artboards and opens one
 full window, plus Present this page; the panel toggle; and the zoom menu: Zoom in `⌘ +`, Zoom out
 `⌘ −`, Zoom to fit `⇧ 1`, Zoom to selection `⇧ 2`, 50%, 100% (`⌘ 0` / `⇧ 0`) and 200%.
@@ -279,7 +288,7 @@ These are the paths that actually get hot; keep them that way.
   Escape to leave. A deck is just a series of same-size artboards; there is no separate slide
   format.
 - **View** (`--mode view` at seed time) - a read-only canvas: no panel, no editing tools, no Save.
-  Pan, zoom, pages, Play, Present and Export PDF still work. Use it for the copy you hand to
+  Pan, zoom, pages, Play, Present and Export PDF still work; dragging anywhere pans. Use it for the copy you hand to
   someone else.
 
 ## Known limits

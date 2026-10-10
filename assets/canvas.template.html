@@ -41,7 +41,8 @@
   #viewport.hand{cursor:grab}
   #viewport.pen{cursor:crosshair}
   #viewport.noting{cursor:copy}
-  #world{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform;--k:1;--inv:1}
+  #world{position:absolute;top:0;left:0;transform-origin:0 0;--k:1;--inv:1}
+  #world.moving{will-change:transform}
   #ink{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
   #deny{position:fixed;z-index:7;pointer-events:none;opacity:0;display:grid;place-items:center;
     border:1.5px dashed var(--dim);background:rgb(255 255 255/.05);color:var(--dim);
@@ -103,7 +104,7 @@
     font-size:11px;letter-spacing:.06em}
   .board-frame{background:#fff;overflow:hidden;box-shadow:0 1px 3px rgb(0 0 0/.4)}
   .board.selected .board-frame{outline:calc(2px * var(--inv)) solid var(--accent);outline-offset:0}
-  .board-frame iframe{display:block;width:100%;height:100%;border:0;background:#fff}
+  .board-frame iframe{display:block;width:100%;height:100%;border:0;background:#fff;pointer-events:none}
   .note{position:absolute;background:var(--note);color:var(--noteink);padding:12px 14px;
     font-size:12.5px;line-height:1.5;white-space:pre-wrap;cursor:grab;
     box-shadow:0 2px 8px rgb(0 0 0/.35);
@@ -322,23 +323,8 @@ let rz=null;const HS=[];
 for(const c of ['nw','ne','sw','se']){const h=document.createElement('div');
   h.dataset.c=c;
   h.style.cssText='position:absolute;width:9px;height:9px;background:#fff;box-sizing:border-box;'
-    +'border:1.5px solid '+PINK+';pointer-events:auto;touch-action:none;'
-    +'cursor:'+(c==='nw'||c==='se'?'nwse':'nesw')+'-resize;'
+    +'border:1.5px solid '+PINK+';pointer-events:none;'
     +(c[0]==='n'?'top:-5px;':'bottom:-5px;')+(c[1]==='w'?'left:-5px;':'right:-5px;');
-  h.addEventListener('pointerdown',(e)=>{if(!cur)return;e.preventDefault();e.stopPropagation();
-    const r=cur.getBoundingClientRect();
-    rz={c:c,x:e.clientX,y:e.clientY,w:r.width,h:r.height,
-        pw:cur.style.width,ph:cur.style.height};
-    h.setPointerCapture(e.pointerId);});
-  h.addEventListener('pointermove',(e)=>{if(!rz||!cur)return;
-    const dx=(rz.c[1]==='w'?-1:1)*(e.clientX-rz.x), dy=(rz.c[0]==='n'?-1:1)*(e.clientY-rz.y);
-    cur.style.width=Math.max(1,Math.round(rz.w+dx))+'px';
-    cur.style.height=Math.max(1,Math.round(rz.h+dy))+'px';
-    place(box,cur,3);});
-  h.addEventListener('pointerup',()=>{if(!rz||!cur)return;
-    parent.postMessage({t:'resized',path:P(cur),
-      pw:rz.pw,ph:rz.ph,w:cur.style.width,h:cur.style.height},'*');
-    parent.postMessage({t:'sel',...info(cur)},'*');rz=null;});
   HS.push(h);box.append(h);}
 box.dataset.dcUi='1';hov.dataset.dcUi='1';
 const gh=document.createElement('div');gh.dataset.dcUi='1';
@@ -349,11 +335,9 @@ const SHAPE={text:{w:90,h:24,r:'3px',t:'Text'},rect:{w:160,h:90,r:'8px',t:''},
   ellipse:{w:120,h:120,r:'50%',t:''}};
 const mount=()=>document.body&&document.body.append(box,hov,gh);
 if(document.body)mount();else addEventListener('DOMContentLoaded',mount);
-const grip=(on)=>{for(const h of HS)h.style.pointerEvents=on?'auto':'none';};
-grip(false);
-const place=(n,el,p)=>{if(!el){n.style.opacity='0';if(n===box)grip(false);return;}p=p||0;
+const place=(n,el,p)=>{if(!el){n.style.opacity='0';return;}p=p||0;
   const r=el.getBoundingClientRect(),br=parseFloat(getComputedStyle(el).borderTopLeftRadius)||0;
-  n.style.opacity='1';if(n===box)grip(true);
+  n.style.opacity='1';
   n.style.left=(r.left+scrollX-p)+'px';n.style.top=(r.top+scrollY-p)+'px';
   n.style.width=(r.width+p*2)+'px';n.style.height=(r.height+p*2)+'px';
   n.style.borderRadius=(br?br+p:4)+'px';};
@@ -375,8 +359,9 @@ const info=(el)=>{const c=getComputedStyle(el),o={};
   return{tag:el.tagName.toLowerCase(),name:nameOf(el),path:P(el),styles:o,
     inline:el.getAttribute('style')||'',text:el.children.length===0?el.textContent:null};};
 addEventListener('message',(e)=>{const m=e.data||{};
-  if(m.t==='mode'){on=!!m.on;if(!on){box.style.opacity='0';grip(false);hov.style.opacity='0';
+  if(m.t==='mode'){on=!!m.on;if(!on){box.style.opacity='0';hov.style.opacity='0';
     gh.style.opacity='0';}}
+  else if(m.t==='ptr'){ptr(m);}
   else if(m.t==='tree'){parent.postMessage({t:'tree',id:m.id,tree:document.body?tree(document.body,0):null},'*');}
   else if(m.t==='pick'){const el=E(m.path);if(el){cur=el;place(box,el,3);parent.postMessage({t:'sel',...info(el)},'*');}}
   else if(m.t==='style'){const el=E(m.path);if(el){cur=el;const pv=el.style[m.prop];
@@ -387,7 +372,6 @@ addEventListener('message',(e)=>{const m=e.data||{};
   else if(m.t==='serialize'){const c=document.documentElement.cloneNode(true);
     c.querySelectorAll('[data-dc-agent],[data-dc-ui]').forEach(n=>n.remove());
     parent.postMessage({t:'html',id:m.id,html:'<!doct'+'ype html>\\n'+c.outerHTML},'*');}
-  else if(m.t==='ghostoff'){gh.style.opacity='0';}
   else if(m.t==='tool'){tool=m.name;
     const sp=SHAPE[tool];
     if(sp){gh.style.width=sp.w+'px';gh.style.height=sp.h+'px';gh.style.borderRadius=sp.r;
@@ -407,41 +391,44 @@ addEventListener('message',(e)=>{const m=e.data||{};
     parent.postMessage({t:'vars',id:m.id,vars:seen},'*');}
   else if(m.t==='setvar'){document.documentElement.style.setProperty(m.name,m.value);
     parent.postMessage({t:'varset',name:m.name,value:m.value},'*');}
-  else if(m.t==='deselect'){box.style.opacity='0';grip(false);cur=null;}});
-addEventListener('mousemove',(e)=>{if(!on||!SHAPE[tool]){gh.style.opacity='0';return;}
-  parent.postMessage({t:'over'},'*');
-  const sp=SHAPE[tool];
-  gh.style.left=(e.clientX+scrollX-sp.w/2)+'px';gh.style.top=(e.clientY+scrollY-sp.h/2)+'px';
-  gh.style.opacity='1';},true);
-addEventListener('mouseleave',()=>{gh.style.opacity='0';},true);
-addEventListener('mouseover',(e)=>{if(on&&!SHAPE[tool]&&e.target!==cur)place(hov,e.target,2);
-  else hov.style.opacity='0';},true);
-addEventListener('mouseout',()=>{hov.style.opacity='0';},true);
-addEventListener('click',(e)=>{if(!on)return;e.preventDefault();e.stopPropagation();
-  let t=e.target;
-  if(SHAPE[tool]){gh.style.opacity='0';const n=document.createElement('div');
-    if(tool==='text'){n.textContent='Text';n.setAttribute('style','font-size:16px;color:#111');}
-    else if(tool==='rect'){n.setAttribute('style','width:160px;height:90px;background:#d9d4cc;border-radius:8px');}
-    else if(tool==='ellipse'){n.setAttribute('style','width:120px;height:120px;background:#d9d4cc;border-radius:50%');}
-    if(t===document.body||t===document.documentElement){t.append(n);}
-    else if(t.children.length){t.append(n);}
-    else{t.parentNode.insertBefore(n,t.nextSibling);}   // sibling of what you clicked
-    t=n;}
-  cur=t;place(box,cur,3);hov.style.opacity='0';parent.postMessage({t:'sel',...info(cur)},'*');},true);
-addEventListener('wheel',(e)=>{e.preventDefault();
-  parent.postMessage({t:'wheel',dx:e.deltaX,dy:e.deltaY,mode:e.deltaMode,ctrl:e.ctrlKey||e.metaKey,
-    x:e.clientX,y:e.clientY},'*');},{passive:false,capture:true});
-for(const g of ['gesturestart','gesturechange','gestureend'])addEventListener(g,(e)=>{e.preventDefault();
-  parent.postMessage({t:'gesture',phase:g,scale:e.scale,x:e.clientX,y:e.clientY},'*');},{passive:false,capture:true});
-const ED=(t)=>!!t&&(t.isContentEditable||/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName));
-const fwd=(e)=>{const m=e.metaKey||e.ctrlKey,k=e.key;
-  const mine=m?/^(=|\\+|-|_|0|s|z)$/i.test(k)
-    :!e.altKey&&!ED(e.target)&&(k===' '||k==='Escape'||k==='Delete'||k==='Backspace'||(on&&/^[vhtfnroadp]$/i.test(k))
-      ||(e.shiftKey&&/^Digit[012]$/.test(e.code)));
-  if(!mine)return;e.preventDefault();
-  parent.postMessage({t:'key',type:e.type,key:k,code:e.code,meta:e.metaKey,ctrl:e.ctrlKey,
-    shift:e.shiftKey,alt:e.altKey,repeat:e.repeat},'*');};
-addEventListener('keydown',fwd,true);addEventListener('keyup',(e)=>{if(e.key===' '&&!ED(e.target))fwd(e);},true);
+  else if(m.t==='deselect'){box.style.opacity='0';cur=null;}});
+// The iframe never receives input: the host owns every pointer, wheel and key event and sends
+// hover, press, drag and release here as viewport coordinates of this document.
+const pick=(x,y)=>{const el=document.elementFromPoint(x,y);return el&&!(el.dataset&&el.dataset.dcUi)?el:null;};
+const handleAt=(x,y)=>{if(!cur||box.style.opacity!=='1')return null;
+  for(const h of HS){const r=h.getBoundingClientRect();
+    if(x>=r.left-4&&x<=r.right+4&&y>=r.top-4&&y<=r.bottom+4)return h.dataset.c;}return null;};
+let curs='';const cursor=(c)=>{if(c!==curs){curs=c;parent.postMessage({t:'cursor',c:c},'*');}};
+const ptr=(m)=>{const x=m.x,y=m.y;
+  if(m.type==='leave'){hov.style.opacity='0';gh.style.opacity='0';cursor('');return;}
+  if(!on)return;
+  if(m.type==='move'){
+    if(rz){const dx=(rz.c[1]==='w'?-1:1)*(x-rz.x),dy=(rz.c[0]==='n'?-1:1)*(y-rz.y);
+      cur.style.width=Math.max(1,Math.round(rz.w+dx))+'px';
+      cur.style.height=Math.max(1,Math.round(rz.h+dy))+'px';place(box,cur,3);return;}
+    const sp=SHAPE[tool];
+    if(sp){hov.style.opacity='0';gh.style.left=(x+scrollX-sp.w/2)+'px';gh.style.top=(y+scrollY-sp.h/2)+'px';
+      gh.style.opacity='1';cursor('');return;}
+    const hc=handleAt(x,y);cursor(hc?(hc==='nw'||hc==='se'?'nwse':'nesw')+'-resize':'');
+    const el=hc?null:pick(x,y);
+    if(el&&el!==cur&&el!==document.documentElement)place(hov,el,2);else hov.style.opacity='0';return;}
+  if(m.type==='down'){const hc=SHAPE[tool]?null:handleAt(x,y);
+    if(hc){const r=cur.getBoundingClientRect();
+      rz={c:hc,x:x,y:y,w:r.width,h:r.height,pw:cur.style.width,ph:cur.style.height};return;}
+    let t=pick(x,y)||document.body;
+    if(SHAPE[tool]){gh.style.opacity='0';const n=document.createElement('div');
+      if(tool==='text'){n.textContent='Text';n.setAttribute('style','font-size:16px;color:#111');}
+      else if(tool==='rect'){n.setAttribute('style','width:160px;height:90px;background:#d9d4cc;border-radius:8px');}
+      else if(tool==='ellipse'){n.setAttribute('style','width:120px;height:120px;background:#d9d4cc;border-radius:50%');}
+      if(t===document.body||t===document.documentElement){document.body.append(n);}
+      else if(t.children.length){t.append(n);}
+      else{t.parentNode.insertBefore(n,t.nextSibling);}   // sibling of what you clicked
+      t=n;}
+    if(t===document.documentElement)t=document.body;
+    cur=t;place(box,cur,3);hov.style.opacity='0';parent.postMessage({t:'sel',...info(cur)},'*');return;}
+  if(m.type==='up'&&rz){parent.postMessage({t:'resized',path:P(cur),
+      pw:rz.pw,ph:rz.ph,w:cur.style.width,h:cur.style.height},'*');
+    parent.postMessage({t:'sel',...info(cur)},'*');rz=null;}};
 addEventListener('scroll',()=>{if(cur)place(box,cur,3);},true);
 })();` + "</scr" + "ipt>";
 
@@ -591,8 +578,8 @@ function setMode(m) {
   viewport.classList.toggle("noting", m === "note");
   viewport.classList.toggle("hand", m === "hand");
   const inFrame = IN_FRAME.includes(m) && !readOnly;
+  viewport.style.cursor = ""; hoverFrame(null);
   for (const f of frames.values()) {
-    f.style.pointerEvents = inFrame || (readOnly && m !== "hand") ? "auto" : "none";
     tellAgent(f, { t: "mode", on: inFrame });
     tellAgent(f, { t: "tool", name: m === "select" ? null : m });
   }
@@ -600,7 +587,7 @@ function setMode(m) {
 }
 
 /* ---- keyboard ------------------------------------------------------------- */
-// One handler for keys pressed on the page and keys an artboard agent forwards to it.
+// Artboards never take focus, so every canvas key arrives here.
 let spaceHand = null;
 function onKey(k) {
   const mod = k.meta || k.ctrl, key = k.key, lower = (key || "").toLowerCase();
@@ -701,7 +688,6 @@ function makeBoard(b) {
   const f = document.createElement("iframe");
   f.setAttribute("sandbox", "allow-scripts"); f.title = nameOf(b);
   f.srcdoc = resolve(files[b.file]);
-  f.style.pointerEvents = (IN_FRAME.includes(mode) && !readOnly) || (readOnly && mode !== "hand") ? "auto" : "none";
   f.addEventListener("load", () => {
     tellAgent(f, { t: "mode", on: IN_FRAME.includes(mode) && !readOnly });
     tellAgent(f, { t: "tool", name: mode === "select" ? null : mode });
@@ -732,11 +718,22 @@ function wireStrip(strip, cur) {   // the name strip selects the artboard and dr
   strip.addEventListener("pointerup", end); strip.addEventListener("pointercancel", end);
   strip.addEventListener("dblclick", (ev) => { ev.stopPropagation(); focusOn(cur()); });
 }
-const apply = () => {
+// A trackpad sends several wheel events per frame: they only move `view`, and one write per frame
+// paints it. The zoom-dependent variables and label change only when the zoom does, and the world
+// is a promoted layer only while it moves, so it re-rasters crisp once it settles.
+let _raf = 0, _k = null, _settle = 0;
+const apply = () => { if (!_raf) _raf = requestAnimationFrame(paintView); };
+function paintView() {
+  _raf = 0;
   world.style.transform = `translate(${view.x}px, ${view.y}px) scale(${view.k})`;
-  world.style.setProperty("--k", view.k); world.style.setProperty("--inv", 1 / view.k);
-  $("#zoom-btn").innerHTML = Math.round(view.k * 100) + "%" + ICON.chevd;
-};
+  if (view.k !== _k) {
+    _k = view.k;
+    world.style.setProperty("--k", view.k); world.style.setProperty("--inv", 1 / view.k);
+    $("#zoom-btn").innerHTML = Math.round(view.k * 100) + "%" + ICON.chevd;
+  }
+  world.classList.add("moving"); clearTimeout(_settle);
+  _settle = setTimeout(() => world.classList.remove("moving"), 160);
+}
 
 /* ---- layer tree ----------------------------------------------------------- */
 const pend = new Map(); let seq = 0;
@@ -1131,17 +1128,8 @@ addEventListener("message", (e) => {
     let key = file; open.add(key);
     for (let i = 1; i < m.path.length; i++) open.add(file + ":" + m.path.slice(0, i).join("."));
     showSide(true); drawTree(); drawProps();
-  } else if (m.t === "wheel" && file) {
-    const [cx, cy] = fromFrame(file, m.x, m.y);
-    wheel(m.dx, m.dy, m.mode, m.ctrl, cx, cy);
-  } else if (m.t === "gesture" && file) {
-    const [cx, cy] = fromFrame(file, m.x, m.y);
-    gesture(m.phase, m.scale, cx, cy);
-  } else if (m.t === "key" && file) {
-    if (!isPresent()) onKey(m);
-  } else if (m.t === "over" && file) {
-    denyEl.style.opacity = "0";
-    for (const [k, fr] of frames) if (k !== file) tellAgent(fr, { t: "ghostoff" });
+  } else if (m.t === "cursor" && file) {
+    if (IN_FRAME.includes(mode)) viewport.style.cursor = m.c || "";
   } else if (m.t === "resized" && file) {
     record({ kind: "size", file, path: m.path, pw: m.pw, ph: m.ph, w: m.w, h: m.h });
   } else if (m.t === "src" || m.t === "vars") {
@@ -1154,14 +1142,6 @@ addEventListener("message", (e) => {
     const r = printWaits.get(m.i); if (r) { printWaits.delete(m.i); r(m.h); }
   }
 });
-// An artboard reports pointer positions in its own CSS px; map them to viewport px.
-function fromFrame(file, x, y) {
-  const f = frames.get(file), v = vpRect();
-  if (!f || x === undefined) return [v.width / 2, v.height / 2];
-  const r = f.getBoundingClientRect(), s = r.width / (f.offsetWidth || 1);
-  return [r.left - v.left + x * s, r.top - v.top + y * s];
-}
-
 /* ---- placement affordance ------------------------------------------------- */
 const INSERT = ["text", "rect", "ellipse"];
 const denyEl = $("#deny");
@@ -1186,22 +1166,48 @@ const vpRect = () => _vp || (_vp = viewport.getBoundingClientRect());
 addEventListener("resize", () => { _vp = null; });
 const local = (e) => { const r = vpRect(); return [e.clientX - r.left, e.clientY - r.top]; };
 const wpt = (e) => { const [x, y] = local(e); return [Math.round((x - view.x) / view.k), Math.round((y - view.y) / view.k)]; };
+// Pointer positions in an artboard's own CSS px, through its on-screen scale.
+function toFrame(file, e) {
+  const f = frames.get(file); if (!f) return null;
+  const r = f.getBoundingClientRect(), s = r.width / (f.offsetWidth || 1);
+  return { x: (e.clientX - r.left) / s, y: (e.clientY - r.top) / s };
+}
+let hovered = null, pressed = null, _pm = null, _pmRaf = 0;
+function hoverFrame(file) {
+  if (hovered && hovered !== file) { const f = frames.get(hovered); if (f) tellAgent(f, { t: "ptr", type: "leave" }); }
+  hovered = file;
+}
+const sendPtr = (file, type, e) => { const f = frames.get(file), pt = toFrame(file, e);
+  if (f && pt) tellAgent(f, { t: "ptr", type, x: pt.x, y: pt.y }); };
+const editsFrames = () => IN_FRAME.includes(mode) && !readOnly && spaceHand === null;
 viewport.addEventListener("pointerdown", (e) => {
   closeMenu();
   const panAnyway = mode === "hand" || e.button === 1;
+  const fr = e.target.closest && e.target.closest(".board-frame");
+  if (!panAnyway && fr && editsFrames() && e.button === 0) {
+    e.preventDefault(); pressed = fr.parentNode.dataset.file; hoverFrame(pressed);
+    sendPtr(pressed, "down", e); viewport.setPointerCapture(e.pointerId); return; }
   if (!panAnyway && (mode === "pen" || mode === "arrow")) { const [x, y] = wpt(e);
     stroke = { d: `M${x} ${y}`, x0: x, y0: y, arrow: mode === "arrow", ...(pages.length ? { page } : {}) };
     mark(); drawings.push(stroke);
     strokeEl = mkPath(stroke); ink.append(strokeEl);            // one node, then mutate it
     viewport.setPointerCapture(e.pointerId); return; }
   if (!panAnyway && mode === "note" && !e.target.closest(".note")) { placeNote(e); return; }
-  if (!panAnyway && (e.target.closest(".board") || e.target.closest(".note"))) return;
+  if (!panAnyway && !readOnly && (e.target.closest(".board") || e.target.closest(".note"))) return;
+  if (!panAnyway && readOnly && e.target.closest(".note")) return;
   if (!panAnyway) deselect();
   e.preventDefault();
   touched = true; drag = { x: e.clientX - view.x, y: e.clientY - view.y };
   viewport.classList.add("panning"); viewport.setPointerCapture(e.pointerId);
 });
 viewport.addEventListener("pointermove", (e) => {
+  if (pressed) { sendPtr(pressed, "move", e); return; }
+  if (!drag && !stroke) {                       // hover, coalesced to one message per frame
+    _pm = e; if (!_pmRaf) _pmRaf = requestAnimationFrame(() => { _pmRaf = 0;
+      const ev = _pm, fr = editsFrames() && ev.target.closest && ev.target.closest(".board-frame");
+      const file = fr ? fr.parentNode.dataset.file : null;
+      hoverFrame(file); if (file) sendPtr(file, "move", ev); });
+  }
   if (stroke) { const [x, y] = wpt(e);
     if (stroke.arrow) { stroke.x1 = x; stroke.y1 = y; } else stroke.d += ` L${x} ${y}`;
     if (strokeEl) strokeEl.setAttribute("d", pathD(stroke));    // no full rebuild per frame
@@ -1209,10 +1215,12 @@ viewport.addEventListener("pointermove", (e) => {
   if (!drag) return;
   view.x = e.clientX - drag.x; view.y = e.clientY - drag.y; apply();
 });
-const endDrag = () => { if (stroke) commitCanvas("ink");
+const endDrag = (e) => { if (pressed) { sendPtr(pressed, "up", e); pressed = null; }
+  if (stroke) commitCanvas("ink");
   drag = null; stroke = null; strokeEl = null; viewport.classList.remove("panning"); };
 viewport.addEventListener("pointerup", endDrag);
 viewport.addEventListener("pointercancel", endDrag);
+viewport.addEventListener("pointerleave", () => { if (!pressed) hoverFrame(null); });
 
 const KMIN = 0.02, KMAX = 8;
 function zoomTo(k, cx, cy) {
@@ -1238,18 +1246,17 @@ function gesture(phase, scale, cx, cy) {   // Safari pinch
   else if (phase === "gesturechange") zoomTo(g0 * scale, cx, cy);
 }
 // Capture on window so a pinch over the header, a toolbar or the panel still never zooms the page.
+// Artboard iframes take no pointer input, so every wheel and pinch over the canvas lands here,
+// in this process, whatever the browser does with cross-process frames.
 addEventListener("wheel", (e) => {
   const overCanvas = !!(e.target.closest && e.target.closest("#viewport"));
-  // Chrome hands a ctrl+wheel over an iframe to both documents; the artboard agent already
-  // forwards its copy, so the host only blocks page zoom here.
-  const fromBoard = e.target.tagName === "IFRAME";
   if (e.ctrlKey || e.metaKey) {
     e.preventDefault();
-    if (isFocus() || isPresent() || fromBoard) return;
+    if (isFocus() || isPresent()) return;
     const v = vpRect();
     const [cx, cy] = overCanvas ? local(e) : [v.width / 2, v.height / 2];
     wheel(0, e.deltaY, e.deltaMode, true, cx, cy);
-  } else if (overCanvas && !fromBoard) {
+  } else if (overCanvas) {
     e.preventDefault();
     wheel(e.deltaX, e.deltaY, e.deltaMode, false);
   }
@@ -1617,14 +1624,15 @@ $("#t-save").onclick = save;
 /* ---- sidebar -------------------------------------------------------------- */
 const sideBtn = $("#side-btn");
 sideBtn.innerHTML = ICON.side; $("#side-x").innerHTML = ICON.x;
-function showSide(on) {
+function showSide(on, remember) {
   if (readOnly) return;
+  if (remember) try { localStorage.setItem("designboard.side", on ? "1" : "0"); } catch {}
   const was = document.body.classList.contains("side");
   if (was === on) return;
   document.body.classList.toggle("side", on); sideBtn.classList.toggle("on", on);
 }
-sideBtn.onclick = () => showSide(!document.body.classList.contains("side"));
-$("#side-x").onclick = () => showSide(false);
+sideBtn.onclick = () => showSide(!document.body.classList.contains("side"), true);
+$("#side-x").onclick = () => showSide(false, true);
 $("#tabs").onclick = (e) => { const b = e.target.closest("button[data-tab]"); if (!b) return;
   $("#tabs").querySelectorAll("button[data-tab]").forEach(x => x.classList.toggle("on", x === b));
   const t = tab = b.dataset.tab;
@@ -1732,6 +1740,8 @@ if (readOnly) { document.body.classList.add("view"); $("#t-save").remove(); }
 const launch = manifest.launch || { view: "canvas" };
 page = pages.length ? (pages.some(p => p.id === launch.page) ? launch.page : pages[0].id) : null;
 paintPageBtn();
+let sidePref = null; try { sidePref = localStorage.getItem("designboard.side"); } catch {}
+showSide(sidePref !== "0");                     // the panel starts open unless it was closed here
 setMode("select");
 render(); paintInk(); drawTree(); drawProps();
 if (launch.view === "focused" && files[launch.file])

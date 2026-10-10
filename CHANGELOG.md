@@ -27,6 +27,12 @@ The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- In Chromium browsers that isolate sandboxed iframes (Chrome, Helium, recent Chromium), a pinch
+  over an artboard did nothing and two-finger scroll over an artboard lost about 40% of the
+  gesture. Artboards no longer take pointer input on the canvas; the canvas owns it and forwards
+  hover, clicks and resize drags to the artboard.
+- Wheel bursts now paint once per frame, and the canvas layer re-rasters crisp after zooming.
+- The properties panel starts open again, and remembers when you close it.
 - A pinch or `⌘` + wheel over the header, toolbars or panel zoomed the whole browser page.
 - Pinch over an artboard zoomed around the window centre instead of the cursor.
 - The zoom buttons zoomed around the canvas origin, throwing the view off screen.
