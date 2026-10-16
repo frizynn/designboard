@@ -37,7 +37,7 @@ There are no runtime dependencies and no build step.
 | `assets/seed.mjs` | CLI for assembling, checking, and extracting canvases |
 | `assets/canvas.template.html` | Self-contained canvas editor and runtime |
 | `references/` | Artboard format and design guidance loaded by the skill |
-| `test/run.mjs` | Seeder, round-trip, input guard, and parser safety tests |
+| `test/run.mjs` | Seeder, round-trip, input guard, parser safety and share link tests |
 
 ## Make a focused change
 

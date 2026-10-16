@@ -72,7 +72,8 @@ The seeder refuses generic names (`design.html`, `index.html`, `output.html`, "U
 ### 3. Check it
 
 `node assets/seed.mjs --check spring-menu-poster.html` must print `ok:` with the title and the
-file list you expect.
+file list you expect, then the page's `file:` URL and, when this machine shares its canvases, a
+`share:` URL.
 
 That proves the page parses, not that anything fits. You will usually not see the canvas before
 the user does, so **size fixed frames by adding up the vertical rhythm with ~5% slack**, and give
@@ -84,11 +85,14 @@ and never hold the handover for it.
 
 ### 4. Hand it over
 
-Always include the complete, copyable URL to the finished canvas in the handover. For a local
-file, use its absolute `file:///` URL and percent-encode spaces and other reserved characters.
-Show the full URL visibly, not only a filename, relative path, or descriptive link label. A
-clickable absolute file link may be added, but does not replace the complete URL. For a hosted
-canvas, use its actual complete HTTPS URL; never invent one.
+Always include the complete, copyable URL to the finished canvas in the handover: the `share:`
+URL that `seed.mjs` printed, when it printed one, and the `file:` URL as the fallback. The
+`share:` URL only appears when the machine maps a local folder to a server it already runs
+(`DESIGNBOARD_SHARE_DIR` and `DESIGNBOARD_SHARE_URL`, see the README); it opens on the user's
+other devices, the `file:` URL only on this one. Copy both exactly as printed. Show the full
+URL visibly, not only a filename, relative path, or descriptive link label. A clickable link may
+be added, but does not replace the complete URL. Never invent a URL, and never start a server
+or publish a folder to get one.
 
 Add one or two plain sentences: what you drafted, what you assumed, what is a
 placeholder worth their double-checking. Do not explain how to pan, zoom, or export - the canvas

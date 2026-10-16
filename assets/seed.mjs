@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // seed.mjs - assemble artboards + canvas.json + images into one self-contained canvas page.
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "node:fs";
-import { basename, extname, join, resolve } from "node:path";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, realpathSync } from "node:fs";
+import { basename, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { homedir } from "node:os";
+import { pathToFileURL } from "node:url";
 
 const GENERIC_FILES = new Set(["design.html","index.html","main.html","page.html","canvas.html",
   "output.html","untitled.html","test.html","temp.html","artboard.html"]);
@@ -155,6 +157,7 @@ const nb = (canvas.artboards || []).length;
 console.log(`seeded ${opt.out} - "${opt.title}", ${nb} artboard${nb === 1 ? "" : "s"}, `
   + `${imgNames.size} image${imgNames.size === 1 ? "" : "s"}, ${kb} KB`
   + (opt.mode === "view" ? " (view-only)" : ""));
+printLinks(opt.out);
 
 // ---- helpers ----------------------------------------------------------------
 function escapeHtml(s) {
@@ -179,6 +182,36 @@ function check(page) {
     + (names.length > boards.length
        ? ` | ${names.length - boards.length} image(s): ${names.filter(n => !boards.includes(n)).join(", ")}`
        : ""));
+  printLinks(page);
+}
+// The handover link. Always the page's file:/// URL; plus a share URL when this machine maps a
+// local folder to a server (README, "Share a canvas with your other devices"): DESIGNBOARD_SHARE_DIR and
+// DESIGNBOARD_SHARE_URL from the environment, else from $XDG_CONFIG_HOME/designboard/share.env.
+function shareConfig() {
+  const env = { DIR: process.env.DESIGNBOARD_SHARE_DIR, URL: process.env.DESIGNBOARD_SHARE_URL };
+  if (!env.DIR && !env.URL) {
+    const file = join(process.env.XDG_CONFIG_HOME || join(homedir(), ".config"), "designboard", "share.env");
+    if (existsSync(file)) for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
+      const m = line.match(/^\s*DESIGNBOARD_SHARE_(DIR|URL)\s*=\s*(.*?)\s*$/);
+      if (m) env[m[1]] = m[2].replace(/^(["'])(.*)\1$/, "$2");
+    }
+  }
+  if (!env.DIR && !env.URL) return null;
+  if (!env.DIR || !env.URL) return warn("set both DESIGNBOARD_SHARE_DIR and DESIGNBOARD_SHARE_URL for a share link");
+  if (!/^https?:\/\/[^/]/i.test(env.URL)) return warn(`DESIGNBOARD_SHARE_URL must start with http:// or https:// - got "${env.URL}"`);
+  const dir = env.DIR.replace(/^~(?=\/|$)/, homedir());
+  if (!existsSync(dir)) return warn(`DESIGNBOARD_SHARE_DIR not found: ${dir}`);
+  return { dir: realpathSync(dir), url: env.URL.replace(/\/+$/, "") };
+}
+function printLinks(page) {
+  const abs = realpathSync(page);
+  console.log(`file: ${pathToFileURL(abs).href}`);
+  const share = shareConfig();
+  if (!share) return;
+  const rel = relative(share.dir, abs);
+  if (rel === ".." || rel.startsWith(".." + sep) || isAbsolute(rel))
+    return warn(`${abs} is outside DESIGNBOARD_SHARE_DIR (${share.dir}) - no share link`);
+  console.log(`share: ${share.url}/${rel.split(sep).map(encodeURIComponent).join("/")}`);
 }
 function extract(page, to) {
   if (!to || to === true) die("--extract needs --to <a fresh, empty directory>");

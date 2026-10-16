@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // Drives seed.mjs end to end. Node only, no browser.
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, readFileSync, rmSync, readdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SEED = join(HERE, "..", "assets", "seed.mjs");
@@ -16,8 +16,18 @@ const ok = (name, cond, extra) => {
   if (cond) { pass++; console.log("  ok   " + name); }
   else { fail++; console.log("  FAIL " + name + (extra ? "\n       " + extra : "")); }
 };
+// No share link from the machine running the tests: an empty config home and no share variables.
+const noConfig = join(dir, "no-config");
+mkdirSync(noConfig);
+const cleanEnv = (extra = {}) => {
+  const env = { ...process.env, XDG_CONFIG_HOME: noConfig, ...extra };
+  for (const k of ["DESIGNBOARD_SHARE_DIR", "DESIGNBOARD_SHARE_URL"]) if (!(k in extra)) delete env[k];
+  return env;
+};
 const run = (args) => execFileSync(process.execPath, [SEED, ...args],
-  { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], env: cleanEnv() });
+const runWith = (args, env) => spawnSync(process.execPath, [SEED, ...args],
+  { cwd: dir, encoding: "utf8", env: cleanEnv(env) });
 const rejects = (args) => { try { run(args); return null; } catch (e) { return (e.stderr || "").trim(); } };
 
 const ART = `<!doct` + `ype html><meta charset="utf-8"><title>Main</title>
@@ -82,7 +92,7 @@ writeFileSync(join(dir, "pages.json"), JSON.stringify({
 }));
 const paged = spawnSync(process.execPath, [SEED, "--template", TPL, "--out", "paged.html",
   "--title", "Paged Canvas", "--artboard", "Main.html", "--artboard", "Evil.html", "--canvas", "pages.json"],
-  { cwd: dir, encoding: "utf8" });
+  { cwd: dir, encoding: "utf8", env: cleanEnv() });
 ok("seeds a title note on a paged canvas", paged.status === 0 && /^ok:/.test(run(["--check", "paged.html"])), paged.stderr);
 const overlap = paged.stderr;
 ok("no overlap warning across pages", !/overlap/.test(overlap), overlap);
@@ -100,6 +110,54 @@ ok("two-finger pan is native scrolling", /#viewport\{[^}]*overflow:scroll/.test(
 ok("artboards on the canvas take no pointer input", /\.board-frame iframe\{[^}]*pointer-events:none/.test(tpl));
 ok("the artboard agent listens to no wheel or pointer events of its own",
   !/addEventListener\('(wheel|click|mousemove|mouseover|pointerdown|keydown)'/.test(tpl));
+
+console.log("\nshare link");
+const shareLine = (out) => (out.match(/^share: (.*)$/m) || [])[1];
+const fileUrl = pathToFileURL(join(dir, "spring-menu.html")).href;
+const plain = run(["--check", "spring-menu.html"]);
+ok("prints the file:/// URL", plain.includes(`file: ${fileUrl}`), plain);
+ok("no share link without configuration", !/^share:/m.test(plain), plain);
+const viaEnv = runWith(["--check", "spring-menu.html"],
+  { DESIGNBOARD_SHARE_DIR: dir, DESIGNBOARD_SHARE_URL: "https://boards.example.test/team/" });
+ok("share link from the environment",
+  shareLine(viaEnv.stdout) === "https://boards.example.test/team/spring-menu.html", viaEnv.stdout + viaEnv.stderr);
+mkdirSync(join(dir, "Q3 menús"));
+const nested = runWith(["--template", TPL, "--out", "Q3 menús/autumn-menu.html", "--title", "Autumn Menu",
+  "--artboard", "Main.html"], { DESIGNBOARD_SHARE_DIR: dir, DESIGNBOARD_SHARE_URL: "https://boards.example.test" });
+ok("seeding prints the share link, percent-encoded",
+  shareLine(nested.stdout) === "https://boards.example.test/Q3%20men%C3%BAs/autumn-menu.html", nested.stdout + nested.stderr);
+ok("seeding prints the file:/// URL, percent-encoded",
+  nested.stdout.includes("file: " + pathToFileURL(join(dir, "Q3 menús", "autumn-menu.html")).href), nested.stdout);
+const home = join(dir, "config-home");
+mkdirSync(join(home, "designboard"), { recursive: true });
+writeFileSync(join(home, "designboard", "share.env"),
+  `# shared folder\nDESIGNBOARD_SHARE_DIR="${dir}"\nDESIGNBOARD_SHARE_URL=https://boards.example.test:8443\n`);
+const viaFile = runWith(["--check", "spring-menu.html"], { XDG_CONFIG_HOME: home });
+ok("share link from the config file",
+  shareLine(viaFile.stdout) === "https://boards.example.test:8443/spring-menu.html", viaFile.stdout + viaFile.stderr);
+writeFileSync(join(home, "designboard", "share.env"),
+  "DESIGNBOARD_SHARE_DIR=~/\nDESIGNBOARD_SHARE_URL=https://boards.example.test\n");
+const tilde = runWith(["--check", "spring-menu.html"], { XDG_CONFIG_HOME: home, HOME: dir });
+ok("~ in the config file is the home directory",
+  shareLine(tilde.stdout) === "https://boards.example.test/spring-menu.html", tilde.stdout + tilde.stderr);
+const envWins = runWith(["--check", "spring-menu.html"],
+  { XDG_CONFIG_HOME: home, DESIGNBOARD_SHARE_DIR: dir, DESIGNBOARD_SHARE_URL: "https://other.example.test" });
+ok("the environment overrides the config file",
+  shareLine(envWins.stdout) === "https://other.example.test/spring-menu.html", envWins.stdout);
+mkdirSync(join(dir, "boards"));
+const outside = runWith(["--check", "spring-menu.html"],
+  { DESIGNBOARD_SHARE_DIR: join(dir, "boards"), DESIGNBOARD_SHARE_URL: "https://boards.example.test" });
+ok("no share link for a page outside the shared folder",
+  outside.status === 0 && !shareLine(outside.stdout) && /outside DESIGNBOARD_SHARE_DIR/.test(outside.stderr), outside.stdout + outside.stderr);
+mkdirSync(join(dir, "boards-old"));
+const sibling = runWith(["--template", TPL, "--out", "boards-old/old-menu.html", "--title", "Old Menu",
+  "--artboard", "Main.html"], { DESIGNBOARD_SHARE_DIR: join(dir, "boards"), DESIGNBOARD_SHARE_URL: "https://b.example.test" });
+ok("a sibling folder sharing the prefix is not shared", !shareLine(sibling.stdout), sibling.stdout);
+const half = runWith(["--check", "spring-menu.html"], { DESIGNBOARD_SHARE_URL: "https://boards.example.test" });
+ok("one variable alone warns and prints no share link",
+  !shareLine(half.stdout) && /set both/.test(half.stderr), half.stdout + half.stderr);
+const badUrl = runWith(["--check", "spring-menu.html"], { DESIGNBOARD_SHARE_DIR: dir, DESIGNBOARD_SHARE_URL: "ftp://boards" });
+ok("rejects a share URL that is not http(s)", !shareLine(badUrl.stdout) && /must start with/.test(badUrl.stderr), badUrl.stderr);
 
 rmSync(dir, { recursive: true, force: true });
 console.log(`\n${pass} passed, ${fail} failed\n`);
