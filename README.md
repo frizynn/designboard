@@ -113,6 +113,61 @@ node assets/seed.mjs --extract spring-menu.html --to extracted-canvas
 
 See the [canvas format reference](references/canvas-format.md) for the complete schema.
 
+## Share a canvas with your other devices
+
+A canvas is a local file, so its `file:///` URL only opens on the machine that made it. If that
+machine already serves a folder over a private network, tell Designboard where the folder is and
+which URL serves it. `seed.mjs` then prints a `share:` URL next to the `file:` URL, and the skill
+hands over both.
+
+```bash
+export DESIGNBOARD_SHARE_DIR="$HOME/boards"
+export DESIGNBOARD_SHARE_URL="https://my-machine.example.ts.net:8443"
+```
+
+Or, so every shell and agent on the machine gets it, the same two lines in
+`~/.config/designboard/share.env` (or `$XDG_CONFIG_HOME/designboard/share.env`):
+
+```bash
+# ~/.config/designboard/share.env
+DESIGNBOARD_SHARE_DIR=~/boards
+DESIGNBOARD_SHARE_URL=https://my-machine.example.ts.net:8443
+```
+
+The environment wins over the file. A page inside `DESIGNBOARD_SHARE_DIR` gets
+`DESIGNBOARD_SHARE_URL` plus its path from that folder, percent-encoded:
+
+```text
+seeded q3/spring-menu.html - "Spring Menu", 1 artboard, 0 images, 96 KB
+file: file:///home/me/boards/q3/spring-menu.html
+share: https://my-machine.example.ts.net:8443/q3/spring-menu.html
+```
+
+A page outside the folder gets only the `file:` URL and a warning. Designboard never starts a
+server or publishes anything: the variables only describe a server you run. Pick one of these:
+
+| Option | When | Precautions |
+|---|---|---|
+| Do not publish | You only open canvases on the machine that made them | Nothing to set. The handover gives the `file:` URL. |
+| `tailscale serve` | The machine and your devices are on one tailnet | Use `serve`, never `funnel`, which puts the folder on the public internet. `tailscale serve --bg --https=8443 http://127.0.0.1:8000` in front of a server bound to `127.0.0.1`, or `tailscale serve --bg --https=8443 ~/boards` to let Tailscale serve the folder itself. Undo with the same command plus `off`. |
+| Any static server | You reach the machine over a VPN, an SSH tunnel or a trusted LAN | Bind it to `127.0.0.1` or to the private interface, never `0.0.0.0` on a public host. For example `python3 -m http.server 8000 --bind 127.0.0.1 --directory ~/boards` plus `ssh -L 8000:127.0.0.1:8000 my-machine`, and `DESIGNBOARD_SHARE_URL=http://localhost:8000`. |
+
+Whatever serves the folder:
+
+- **Share a dedicated folder** that holds only canvases and their images. Never a home
+  directory, a repository or a notes vault with `.env` files, keys, tokens, logs or exports, and
+  no symlinks that point out of it. Simple servers such as `python3 -m http.server` list
+  directories and serve dotfiles.
+- **Read-only, private network only.** GET and HEAD, no uploads, nothing reachable from the
+  public internet.
+- **Restrict by identity if you can.** `tailscale serve` adds a `Tailscale-User-Login` header
+  to requests from your devices and strips any copy a client sends, so a server behind it can
+  answer only your login. It is optional; the tailnet already limits who can connect.
+- **Mind other apps on the same host name.** Browsers send a host's cookies to every port. If
+  other web apps run on the same name, serve canvases with
+  `Content-Security-Policy: sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals allow-downloads`
+  so a canvas runs in an opaque origin and cannot read their cookies. Canvases still work there.
+
 ## How it works
 
 ```text
