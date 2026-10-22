@@ -498,6 +498,7 @@ let view = { x: 80, y: 80, k: 1 }, page = null, touched = false;
 let mode = "select", sel = null, trees = new Map(), open = new Set(), boardSel = null;
 let lastShape = "rect";
 const frames = new Map();
+const loaded = new WeakSet();   // iframes whose agent is listening; before load a message is lost
 const pageOf = (o) => o.page || (pages[0] && pages[0].id);
 const onPage = (o) => !pages.length || pageOf(o) === page;
 const tellAgent = (f, m) => { try { f.contentWindow.postMessage(m, "*"); } catch {} };
@@ -696,6 +697,7 @@ function makeBoard(b) {
   f.setAttribute("sandbox", "allow-scripts"); f.title = nameOf(b);
   f.srcdoc = resolve(files[b.file]);
   f.addEventListener("load", () => {
+    loaded.add(f);
     tellAgent(f, { t: "mode", on: IN_FRAME.includes(mode) && !readOnly });
     tellAgent(f, { t: "tool", name: mode === "select" ? null : mode });
     askTree(b.file);
@@ -1387,9 +1389,10 @@ function addArtboard() {
   render(); commitCanvas("artboard"); setMode("select"); selectBoard(name);
 }
 // Pull the live source of artboards out of their iframes into files[], without reloading them.
+// A frame that has not loaded yet still holds files[] as is, and asking it would only time out.
 async function sync(list) {
   for (const file of list || [...frames.keys()]) {
-    const f = frames.get(file); if (!f) continue;
+    const f = frames.get(file); if (!f || !loaded.has(f)) continue;
     const h = await askHtml(f); if (!h) continue;
     files[file] = h; const rec = shown.get(file); if (rec) rec.src = h;
   }
@@ -1551,6 +1554,7 @@ let focusFile = null;
 async function focusOn(b) {
   closeMenu(); focusFile = b.file;
   await sync([b.file]);
+  if (focusFile !== b.file) return;   // closed or replaced while syncing: never open late
   fwrap.textContent = "";
   const f = document.createElement("iframe");
   f.setAttribute("sandbox", "allow-scripts allow-forms allow-modals"); f.title = nameOf(b);

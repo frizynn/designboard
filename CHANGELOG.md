@@ -29,6 +29,9 @@ The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A canvas launched `focused` opened its artboard about three seconds after load, usually while
+  you were already scrolling, so a scroll seemed to zoom into the first page. It now opens on the
+  first paint, and an artboard opened from the canvas never shows up late after it was replaced.
 - Two-finger pan is the browser's native, threaded scrolling with the platform's momentum. On a
   20-artboard canvas its latency p95 fell from about 40 ms to 18 ms, and it no longer drops frames
   when the page is busy.
