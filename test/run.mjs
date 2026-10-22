@@ -98,6 +98,10 @@ ok("Save offers HTML and PDF", /saveBtn\.onclick = \(\) => openMenu\(saveBtn,[\s
 ok("two-finger pan is native scrolling", /#viewport\{[^}]*overflow:scroll/.test(tpl) &&
   /addEventListener\("wheel", \(e\) => \{\s*if \(!\(e\.ctrlKey \|\| e\.metaKey\)\) return;/.test(tpl));
 ok("artboards on the canvas take no pointer input", /\.board-frame iframe\{[^}]*pointer-events:none/.test(tpl));
+ok("syncing skips artboards that have not loaded, so a focused launch opens on the first paint",
+  /f\.addEventListener\("load", \(\) => \{\s*loaded\.add\(f\)/.test(tpl) &&
+  /async function sync\(list\) \{[\s\S]{0,160}!loaded\.has\(f\)\) continue;/.test(tpl) &&
+  /await sync\(\[b\.file\]\);\s*if \(focusFile !== b\.file \|\| isPresent\(\)\) return;/.test(tpl));
 ok("the artboard agent listens to no wheel or pointer events of its own",
   !/addEventListener\('(wheel|click|mousemove|mouseover|pointerdown|keydown)'/.test(tpl));
 
