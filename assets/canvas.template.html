@@ -648,7 +648,8 @@ function render() {
       placeBoard(rec.el, b);
       if (rec.src !== files[file]) {
         rec.src = files[file];
-        rec.el.querySelector("iframe").srcdoc = resolve(files[file]);
+        const f = rec.el.querySelector("iframe");
+        loaded.delete(f); f.srcdoc = resolve(files[file]);
       }
       continue;
     }
@@ -1554,7 +1555,7 @@ let focusFile = null;
 async function focusOn(b) {
   closeMenu(); focusFile = b.file;
   await sync([b.file]);
-  if (focusFile !== b.file) return;   // closed or replaced while syncing: never open late
+  if (focusFile !== b.file || isPresent()) return;   // closed or replaced while syncing: never open late
   fwrap.textContent = "";
   const f = document.createElement("iframe");
   f.setAttribute("sandbox", "allow-scripts allow-forms allow-modals"); f.title = nameOf(b);
