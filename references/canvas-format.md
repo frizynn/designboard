@@ -71,7 +71,10 @@ Use pages for genuinely separable sets - flows vs. a component sheet, v1 vs. v2.
 print piece: those are a series of artboards on **one** page.
 
 **launch** - which view a fresh open lands on. Exactly two shapes:
-`{"view": "canvas"}` (optional `"page"`) or `{"view": "focused", "file": "<a listed artboard>"}`.
+`{"view": "canvas"}` (optional `"page"` and `"fill"`) or
+`{"view": "focused", "file": "<a listed artboard>"}`. `fill` (above 0, at most 1, default `0.3`) is
+the share of the visible area the page's first artboard covers on a first open; after that the
+browser remembers the viewer's own zoom, page and position.
 
 ## Rules the seeder enforces
 
