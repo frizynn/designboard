@@ -155,6 +155,15 @@ The chrome follows a small motion contract; keep it if you touch the template.
   content plus one viewport of slack on every side, scales the world, scrolls to the view and keeps
   the sub-pixel remainder in the world offset so the anchor never jitters. `--k`/`--inv` and the
   zoom label change only with the zoom. Interactive artboards are used through Play.
+- **Fingers belong to the touch camera.** `#viewport` is `touch-action: none`, which leaves wheel
+  and trackpad scrolling native but hands every finger to `touchCamera`: one finger pans (8 px
+  slop, then 1:1, then momentum with a 325 ms decay when released moving), two fingers zoom around
+  their midpoint and pan with it, a tap selects and a double tap frames. Safari's own `gesture*`
+  events stand down while the camera holds fingers, or a pinch would zoom twice. A name strip, a
+  note and the drawing tools keep a single finger for their own drag; a second finger turns it
+  into a pinch and drops a half-drawn stroke. Shortcut moves (double tap, the touch bar) glide in
+  240 ms, zoom geometric and centre linear; `prefers-reduced-motion` jumps. Test with
+  `Input.dispatchTouchEvent` under touch emulation and read the zoom back from `#world`.
 - **Measure smoothness in the user's browser engine.** Trace Chromium's own frame pipeline
   (`PipelineReporter`, `InputLatency::*`) while `Input.synthesizeScrollGesture` and
   `Input.synthesizePinchGesture` run over artboards that cover the screen; frames over empty canvas
@@ -242,6 +251,26 @@ The properties panel starts open and remembers being closed (`localStorage`).
 full window, plus Present this page; the panel toggle; and the zoom menu: Zoom in `⌘ +`, Zoom out
 `⌘ −`, Zoom to fit `⇧ 1`, Zoom to selection `⇧ 2`, 50%, 100% (`⌘ 0` / `⇧ 0`) and 200%.
 
+**Touch screens and phones**: one finger pans with momentum, two fingers pinch around their
+midpoint, a tap selects (an element with Select, the artboard otherwise), a double tap frames the
+artboard under the finger and a second one frames everything again. A double tap on a name strip
+opens the artboard. A **touch bar** at the bottom, above the safe area, has 44 px buttons for the
+previous and next artboard of the page (each framed and selected), zoom out, the zoom menu, zoom
+in, fit everything and fit the current artboard (the selected one, else the one nearest the
+middle). Menus hide keyboard shortcuts on touch screens. Under 640 px wide the top row is the page
+menu, a tools menu and Play, the zoom moves to the touch bar, and the properties panel starts
+closed and does not open by itself on a selection. An artboard opened on a touch screen keeps its
+design size, starts fitted to its width and has its own pinch, pan and double tap; the touch bar
+drives it (fit whole, fit width, steps). A prototype keeps its own taps there, so zoom it with the
+touch bar.
+
+**Where the view starts**: the zoom, the page and where each page was left are kept per canvas in
+this browser (`localStorage`, keyed by the file path and title), so a reload or a page switch
+lands where you were and switching pages keeps the zoom. With nothing kept, a page opens centred
+on its first artboard, zoomed until it covers about 30% of the visible area (never more than fits
+whole). `"launch": {"fill": 0.5}` in `canvas.json` changes that share. Zoom to fit is still in the
+zoom menu, on `⇧ 1` and on the touch bar.
+
 **Artboards**: the name strip selects one and drags it; double-click opens it. Prototypes show a
 `PLAY` button, static artboards an open icon, both with a download. A selected artboard's panel
 edits its name, size, position, page, Static or Prototype, PDF mode (one page or full height),
@@ -310,7 +339,8 @@ These are the paths that actually get hot; keep them that way.
 - Undo/redo (200 steps) covers style, text and source edits, notes, ink, artboards and pages.
 - Export PDF goes through the browser's print dialog. There is no per-artboard PNG export.
 - Elements inside an artboard cannot be dragged or deleted from the canvas yet; use Code.
-- Panning stops one viewport past the content on each side; the canvas is not infinite.
+- Wheel and trackpad panning stop one viewport past the content on each side; finger panning
+  and zoom do not.
 - Inserting a text, rectangle or ellipse is not an undo step, and it shifts the position-based
   paths of later siblings, so undoing an edit made before the insert can hit the wrong element.
 

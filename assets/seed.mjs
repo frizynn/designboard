@@ -114,6 +114,8 @@ if (canvas.launch) {
     if (!(L.file in files)) die(`launch.file "${L.file}" is not a seeded artboard`);
   } else if (L.view === "canvas") {
     if (L.page && !pageIds.has(L.page)) die(`launch.page "${L.page}" is not a listed page`);
+    if (L.fill != null && !(typeof L.fill === "number" && L.fill > 0 && L.fill <= 1))
+      die(`launch.fill must be a number above 0 and at most 1`);
   } else die(`launch.view must be "canvas" or "focused"`);
 }
 

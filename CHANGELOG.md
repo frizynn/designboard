@@ -15,6 +15,17 @@ The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Touch screens and phones: one finger pans with momentum, two fingers pinch around their
+  midpoint, a double tap frames the artboard under the finger or everything again, and a double
+  tap on a name strip opens it. Safari no longer zooms the page instead of the canvas.
+- A touch bar with 44 px buttons: previous and next artboard, zoom out, zoom menu, zoom in, fit
+  everything and fit the current artboard. Menus hide keyboard shortcuts on touch screens.
+- An artboard opened on a touch screen keeps its design size, starts fitted to its width and has
+  its own pinch, pan and double tap.
+- The zoom, the page and where each page was left are remembered per canvas in the browser:
+  a reload lands where you were and switching pages keeps the zoom.
+- A first open centres the page's first artboard at about 30% of the visible area instead of
+  fitting everything; `"launch": {"fill": ...}` changes the share.
 - Save asks for the format: the editable HTML canvas (`⌘ S` still saves it directly) or a PDF of
   this page, all pages or the selected artboard.
 - Pages can be created, renamed, reordered and deleted from the page menu, and an artboard can
@@ -29,6 +40,10 @@ The project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- On a phone the top pills overlapped and cut each other off, and the properties panel opened
+  over the whole canvas. Under 640 px wide the top row is the page menu, a tools menu and Play,
+  the zoom moves to the touch bar, and the panel starts closed.
+- In Chromium on a touch screen a pinch did nothing.
 - A canvas launched `focused` opened its artboard about three seconds after load, so a scroll or
   pinch made in those seconds seemed to zoom into the first page. It now opens on the
   first paint, and an artboard opened from the canvas never shows up late after it was replaced.

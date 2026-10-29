@@ -104,6 +104,22 @@ ok("syncing skips artboards that have not loaded, so a focused launch opens on t
   /await sync\(\[b\.file\]\);\s*if \(focusFile !== b\.file \|\| isPresent\(\)\) return;/.test(tpl));
 ok("the artboard agent listens to no wheel or pointer events of its own",
   !/addEventListener\('(wheel|click|mousemove|mouseover|pointerdown|keydown)'/.test(tpl));
+ok("fingers go to the touch camera, wheel and trackpad stay native",
+  /#viewport\{[^}]*touch-action:none/.test(tpl) && /touchCamera\(viewport,/.test(tpl) && /touchCamera\(fwrap,/.test(tpl));
+ok("Safari's pinch stands down while the touch camera holds fingers",
+  /gTouch = fingers\.size > 0/.test(tpl) && /\|\| gTouch\) return;/.test(tpl));
+ok("touch bar buttons are at least 44 px and touch menus hide keyboard shortcuts",
+  /#mbar button\{height:44px;min-width:44px\}/.test(tpl) &&
+  /@media \(hover:none\) and \(pointer:coarse\)\{ \.menu kbd\{display:none\} \}/.test(tpl));
+ok("the view is remembered per canvas and a page switch keeps the zoom",
+  /localStorage\.setItem\(VIEW_KEY/.test(tpl) && /function goPage\(id\) \{[\s\S]{0,200}const k = view\.k;[\s\S]{0,200}land\(k\);/.test(tpl));
+writeFileSync(join(dir, "fill.json"), JSON.stringify({ launch: { view: "canvas", fill: 2 } }));
+ok("rejects a launch fill outside (0, 1]",
+  /launch\.fill must be/.test(rejects(["--template", TPL, "--out", "a-poster.html", "--title", "A Poster",
+    "--artboard", "Main.html", "--canvas", "fill.json"]) || ""));
+writeFileSync(join(dir, "fill.json"), JSON.stringify({ launch: { view: "canvas", fill: 0.5 } }));
+ok("accepts a launch fill", /^seeded/.test(run(["--template", TPL, "--out", "a-poster.html", "--title", "A Poster",
+  "--artboard", "Main.html", "--canvas", "fill.json"])));
 
 rmSync(dir, { recursive: true, force: true });
 console.log(`\n${pass} passed, ${fail} failed\n`);
